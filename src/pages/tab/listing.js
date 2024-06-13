@@ -13,6 +13,7 @@ import { useAccount, useBalance, useContractRead, useContractWrite, useNetwork }
 import { Button as notificationButton, notification, Space } from 'antd';
 import useAllowanceRead from './starknet-contract-provider';
 import bigInt from 'big-integer';
+import { lockMoneyIntoBTCScript } from '../../Utils/AtomicService';
 
 
 
@@ -1548,13 +1549,13 @@ export default function Listing() {
     };
 
     const showModal = () => {
-    
+
         //增加判断是否已经连接上了两个钱包，如果其中一个没连接上，直接
-        if(!btcAddress|| btcAddress===''){
+        if (!btcAddress || btcAddress === '') {
             handleBitcoinClick();
             return;
         }
-        if(!address||address===''){
+        if (!address || address === '') {
             handleStarknetClick();
             return
         }
@@ -1570,64 +1571,68 @@ export default function Listing() {
 
     const HandleSwap = async () => {
         setIsLoading(true); // 设置加载状态为 true
-        try {
-            //获取当前地址余额
-            if (strkAddress == '') {
-                console.log('未连接钱包', strkAddress);
-                openNotificationWithIcon('error');
-
-            } else {
-                let approved_amount = await get_strk_Token_allowance(strkAddress);
-
-                if (approved_amount >= buyAmount) {
-                   
-                    // console.log('额度足，无需授权');
-
-                    // let new_contract = await writeCreate();
-                    // console.log('new_contract', new_contract);
-
-                    // let atomic_child_contract_address = await get_transactionhash_result(new_contract['transaction_hash']);
-                    // console.log('atomic_child_contract_address', atomic_child_contract_address);
-
-
-                } else {
-                    // let ruslt = await writeAsync();
-                    // // // 这里执行交易代码
-
-                    // console.log('交易状态为', ruslt);
-
-
-                    // let new_contract = await writeCreate();
-                    // console.log('new_contract', new_contract);
-
-                    // let atomic_child_contract_address = await get_transactionhash_result(new_contract['transaction_hash']);
-                    // console.log('atomic_child_contract_address', atomic_child_contract_address);
-
-                }
-
-                openNotificationWithIcon('success');
-                setIsModalOpen(false);
-
-
-                console.log('开始订单信息到节点');
-                //同步信息给relay
-                await synch_makeorder();
-                console.log('已经同步订单信息到节点');
-
-
-
-
-
-            }
-
-
-
-        } catch (error) {
-            console.error(error);
-            // 处理错误
-        } finally {
-            setIsLoading(false); // 无论成功或失败,都设置加载状态为 false
+        const param = {
+            publicKey:btcAddress
         }
+        console.log("btcADd");
+        lockMoneyIntoBTCScript(param);
+        // try {
+        //     //获取当前地址余额
+        //     if (address == '') {
+        //         console.log('未连接钱包', strkAddress);
+        //         openNotificationWithIcon('error');
+
+        //     } else {
+        //         let approved_amount = await get_strk_Token_allowance(strkAddress);
+
+        //         if (approved_amount >= buyAmount) {
+
+        //             // console.log('额度足，无需授权');
+
+        //             // let new_contract = await writeCreate();
+        //             // console.log('new_contract', new_contract);
+
+        //             // let atomic_child_contract_address = await get_transactionhash_result(new_contract['transaction_hash']);
+        //             // console.log('atomic_child_contract_address', atomic_child_contract_address);
+
+
+        //         } else {
+        //             // let ruslt = await writeAsync();
+        //             // // // 这里执行交易代码
+
+        //             // console.log('交易状态为', ruslt);
+
+
+        //             // let new_contract = await writeCreate();
+        //             // console.log('new_contract', new_contract);
+
+        //             // let atomic_child_contract_address = await get_transactionhash_result(new_contract['transaction_hash']);
+        //             // console.log('atomic_child_contract_address', atomic_child_contract_address);
+
+        //         }
+
+        //         openNotificationWithIcon('success');
+        //         setIsModalOpen(false);
+        //         console.log('开始订单信息到节点');
+              
+        //         //同步信息给relay   
+        //         // await synch_makeorder();
+        //         console.log('已经同步订单信息到节点');
+
+
+
+
+
+        //     }
+
+
+
+        // } catch (error) {
+        //     console.error(error);
+        //     // 处理错误
+        // } finally {
+        //     setIsLoading(false); // 无论成功或失败,都设置加载状态为 false
+        // }
 
     };
 
@@ -1688,45 +1693,57 @@ export default function Listing() {
 
     }
 
-    
-    async function synch_makeorder() {
-        const data = {
-                node_id: selectedCard.nodeid,
-                swaptype: "strk2btc",
-                timestamp: "2024-04-17T11:30:00.000Z",
-                user_btcaddress: btcAddress,
-                user_strkaddress: strkAddress,
-                amount_in: 1000,
-                amount_out: 0.002,
-                transaction_hash: "transaction_hash_value",
-                hashlock: "hashlock_value",
-                node_btcaddress: selectedCard.node_btcaddress,
-                node_strkaddress: selectedCard.node_strkaddress
-        };
 
-   
-      
+    async function synch_makeorder() {
+        // const data = {
+        //         node_id: selectedCard.nodeid,
+        //         swaptype: "strk2btc",
+        //         timestamp: "2024-04-17T11:30:00.000Z",
+        //         user_btcaddress: btcAddress,
+        //         user_strkaddress: strkAddress,
+        //         amount_in: 1000,
+        //         amount_out: 0.002,
+        //         transaction_hash: "transaction_hash_value",
+        //         hashlock: "hashlock_value",
+        //         node_btcaddress: selectedCard.node_btcaddress,
+        //         node_strkaddress: selectedCard.node_strkaddress
+        // };
+
+        const data = {
+            node_id: selectedCard.nodeid,
+            swaptype: "btc2strk",
+            timestamp: "2024-06-12T11:30:00.000Z",
+            user_btcaddress: btcAddress,
+            user_strkaddress: address,
+            amount_in: 1000,
+            amount_out: 0.002,
+            transaction_hash: "transaction_hash_value",
+            hashlock: "hashlock_value",
+            node_btcaddress: "test",
+            node_strkaddress: "test"
+        }
+
         console.log('开始发送请求');
         try {
-          const response = await fetch('http://45.32.100.53:4000/api/v1/makeorder', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(data),
-          });
-      
-          if (!response.ok) {
-            throw new Error('Network response was not ok');
-          }
-      
-          console.log('Response:', response);
-          const responseData = await response.json();
-          console.log('Response:', responseData);
+            const response = await fetch('http://45.32.100.53:4000/api/v1/makeorder', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(data),
+            });
+
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+
+            console.log('Response:', response);
+            const responseData = await response.json();
+            console.log('Response:', responseData);
         } catch (error) {
-          console.error('Error:', error);
+            console.error('Error:', error);
         }
-      }
+    }
 
 
 
@@ -1773,7 +1790,8 @@ export default function Listing() {
 
         const fetchData = async () => {
             try {
-                const response = await fetch('http://45.32.100.53:4000/api/v1/pool');
+                // 45.32.100.53
+                const response = await fetch('http://127.0.0.1:4000/api/v1/pool');
                 const data = await response.json();
                 const formattedList = data.pool.map((item) => ({
                     title: 'BTC',
@@ -1785,11 +1803,11 @@ export default function Listing() {
                     Total: `${item.supply_btc} BTC`,
                     Value: `≈$${(item.supply_btc * item.price * 0.0819).toFixed(4)}`,
                     server: item.bitcoin_address,
-                    bitcoin_address:item.bitcoin_address,
-                    balanceof_btc:item.balanceof_btc,
-                    starknet_address:item.starknet_address,
-                    nodeid:item.nodeid,
-                    blanceof_strk:item.blanceof_strk
+                    bitcoin_address: item.bitcoin_address,
+                    balanceof_btc: item.balanceof_btc,
+                    starknet_address: item.starknet_address,
+                    nodeid: item.nodeid,
+                    blanceof_strk: item.blanceof_strk
 
 
                 }));

@@ -87,7 +87,7 @@ export default function Order() {
       title: 'Status',
       dataIndex: 'status',
       key: 'status',
-      render: () => <span style={{ color: '#00D889' }}>pending</span>,
+      render: (val) => <span style={{ color: '#00D889' }}>{console.log("val----",val)}</span>,
     },
     {
       title: 'Action',
@@ -106,7 +106,10 @@ export default function Order() {
 
         const url = `http://localhost:4000/api/v1/userOrder?user_btcaddress=${userBTCAddress}&user_strkaddress=${userSTRKAddress}`;
         const response = await fetch(url);
+        
         const data = await response.json();
+        console.log("data---",data);
+        // alert(JSON.stringify(data))
         setData(data);
       } catch (error) {
         console.error('Error fetching data:', error);
