@@ -13,6 +13,8 @@ import { useAccount, useBalance, useContractRead, useContractWrite, useNetwork }
 import { Button as notificationButton, notification, Space } from 'antd';
 import useAllowanceRead from './starknet-contract-provider';
 import bigInt from 'big-integer';
+import { getUTXO, lockMoneyIntoBTCScript, synch_makeorder } from '../../Utils/AtomicService';
+import { baseUrl } from '../../static/Const';
 
 
 
@@ -24,7 +26,7 @@ export default function Listing() {
     const [list, setList] = useState([])
     const [current, setCurrent] = useState(0)
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [buyAmount, setBuyAmount] = useState('0');
+    const [buyAmount, setBuyAmount] = useState('10');
     const [selectedCard, setSelectedCard] = useState({
         title: 'BTC',
         code: 1,
@@ -35,16 +37,7 @@ export default function Listing() {
         Total: 1,
         Value: 1,
         server: 1
-    });
-
-
-
-    const { account, myaddress, status } = useAccount();
-
-
-
-
-
+    })
     const {
         btcAddress,
         strkAddress,
@@ -55,15 +48,12 @@ export default function Listing() {
 
         isStrkAddressDropdownOpen,
         isBtcAddressDropdownOpen,
-
+        setSwapContractAddress,
         handleStarknetClick,
         CloseConnectStarknet,
         handleBitcoinClick
     } = useContext(WalletContext);
-
     const [api, contextHolder] = notification.useNotification();
-
-
     const openNotificationWithIcon = (type) => {
         api[type]({
             message: 'Notification Title',
@@ -79,6 +69,7 @@ export default function Listing() {
     };
 
     const testAddress = "0x04718f5a0Fc34cC1AF16A1cdee98fFB20C31f5cD61D6Ab07201858f4287c938D";
+
     const abi = [
         {
             "type": "impl",
@@ -1418,10 +1409,324 @@ export default function Listing() {
             ]
         }
     ];
-
+    const claimAbi = [
+        {
+            "type": "impl",
+            "name": "AtomicStark",
+            "interface_name": "starknet_multiple_contracts::IAtomicStark"
+        },
+        {
+            "type": "enum",
+            "name": "core::bool",
+            "variants": [
+                {
+                    "name": "False",
+                    "type": "()"
+                },
+                {
+                    "name": "True",
+                    "type": "()"
+                }
+            ]
+        },
+        {
+            "type": "interface",
+            "name": "starknet_multiple_contracts::IAtomicStark",
+            "items": [
+                {
+                    "type": "function",
+                    "name": "get_alice",
+                    "inputs": [],
+                    "outputs": [
+                        {
+                            "type": "core::starknet::contract_address::ContractAddress"
+                        }
+                    ],
+                    "state_mutability": "view"
+                },
+                {
+                    "type": "function",
+                    "name": "get_caller",
+                    "inputs": [],
+                    "outputs": [
+                        {
+                            "type": "core::starknet::contract_address::ContractAddress"
+                        }
+                    ],
+                    "state_mutability": "external"
+                },
+                {
+                    "type": "function",
+                    "name": "get_bob",
+                    "inputs": [],
+                    "outputs": [
+                        {
+                            "type": "core::starknet::contract_address::ContractAddress"
+                        }
+                    ],
+                    "state_mutability": "view"
+                },
+                {
+                    "type": "function",
+                    "name": "get_locktime",
+                    "inputs": [],
+                    "outputs": [
+                        {
+                            "type": "core::integer::u64"
+                        }
+                    ],
+                    "state_mutability": "view"
+                },
+                {
+                    "type": "function",
+                    "name": "get_hash",
+                    "inputs": [],
+                    "outputs": [
+                        {
+                            "type": "core::array::Array::<core::integer::u8>"
+                        }
+                    ],
+                    "state_mutability": "view"
+                },
+                {
+                    "type": "function",
+                    "name": "calculate_hash",
+                    "inputs": [
+                        {
+                            "name": "secret",
+                            "type": "core::array::Array::<core::integer::u8>"
+                        }
+                    ],
+                    "outputs": [
+                        {
+                            "type": "core::bool"
+                        }
+                    ],
+                    "state_mutability": "view"
+                },
+                {
+                    "type": "function",
+                    "name": "calculate_hash_test",
+                    "inputs": [
+                        {
+                            "name": "secret",
+                            "type": "core::array::Array::<core::integer::u8>"
+                        }
+                    ],
+                    "outputs": [
+                        {
+                            "type": "core::array::Array::<core::integer::u8>"
+                        }
+                    ],
+                    "state_mutability": "view"
+                },
+                {
+                    "type": "function",
+                    "name": "calculate_hash_test_a",
+                    "inputs": [
+                        {
+                            "name": "secret",
+                            "type": "core::array::Array::<core::integer::u8>"
+                        }
+                    ],
+                    "outputs": [
+                        {
+                            "type": "core::array::Array::<core::integer::u8>"
+                        }
+                    ],
+                    "state_mutability": "view"
+                },
+                {
+                    "type": "function",
+                    "name": "bob_claim",
+                    "inputs": [
+                        {
+                            "name": "hash",
+                            "type": "core::array::Array::<core::integer::u8>"
+                        }
+                    ],
+                    "outputs": [
+                        {
+                            "type": "core::bool"
+                        }
+                    ],
+                    "state_mutability": "external"
+                },
+                {
+                    "type": "function",
+                    "name": "alice_withdraw",
+                    "inputs": [],
+                    "outputs": [
+                        {
+                            "type": "core::bool"
+                        }
+                    ],
+                    "state_mutability": "external"
+                }
+            ]
+        },
+        {
+            "type": "constructor",
+            "name": "constructor",
+            "inputs": [
+                {
+                    "name": "_alice",
+                    "type": "core::starknet::contract_address::ContractAddress"
+                },
+                {
+                    "name": "_bob",
+                    "type": "core::starknet::contract_address::ContractAddress"
+                },
+                {
+                    "name": "_token",
+                    "type": "core::starknet::contract_address::ContractAddress"
+                },
+                {
+                    "name": "_locktime",
+                    "type": "core::integer::u64"
+                },
+                {
+                    "name": "_amount",
+                    "type": "core::integer::u128"
+                },
+                {
+                    "name": "hash_1",
+                    "type": "core::integer::u8"
+                },
+                {
+                    "name": "hash_2",
+                    "type": "core::integer::u8"
+                },
+                {
+                    "name": "hash_3",
+                    "type": "core::integer::u8"
+                },
+                {
+                    "name": "hash_4",
+                    "type": "core::integer::u8"
+                },
+                {
+                    "name": "hash_5",
+                    "type": "core::integer::u8"
+                },
+                {
+                    "name": "hash_6",
+                    "type": "core::integer::u8"
+                },
+                {
+                    "name": "hash_7",
+                    "type": "core::integer::u8"
+                },
+                {
+                    "name": "hash_8",
+                    "type": "core::integer::u8"
+                },
+                {
+                    "name": "hash_9",
+                    "type": "core::integer::u8"
+                },
+                {
+                    "name": "hash_10",
+                    "type": "core::integer::u8"
+                },
+                {
+                    "name": "hash_11",
+                    "type": "core::integer::u8"
+                },
+                {
+                    "name": "hash_12",
+                    "type": "core::integer::u8"
+                },
+                {
+                    "name": "hash_13",
+                    "type": "core::integer::u8"
+                },
+                {
+                    "name": "hash_14",
+                    "type": "core::integer::u8"
+                },
+                {
+                    "name": "hash_15",
+                    "type": "core::integer::u8"
+                },
+                {
+                    "name": "hash_16",
+                    "type": "core::integer::u8"
+                },
+                {
+                    "name": "hash_17",
+                    "type": "core::integer::u8"
+                },
+                {
+                    "name": "hash_18",
+                    "type": "core::integer::u8"
+                },
+                {
+                    "name": "hash_19",
+                    "type": "core::integer::u8"
+                },
+                {
+                    "name": "hash_20",
+                    "type": "core::integer::u8"
+                },
+                {
+                    "name": "hash_21",
+                    "type": "core::integer::u8"
+                },
+                {
+                    "name": "hash_22",
+                    "type": "core::integer::u8"
+                },
+                {
+                    "name": "hash_23",
+                    "type": "core::integer::u8"
+                },
+                {
+                    "name": "hash_24",
+                    "type": "core::integer::u8"
+                },
+                {
+                    "name": "hash_25",
+                    "type": "core::integer::u8"
+                },
+                {
+                    "name": "hash_26",
+                    "type": "core::integer::u8"
+                },
+                {
+                    "name": "hash_27",
+                    "type": "core::integer::u8"
+                },
+                {
+                    "name": "hash_28",
+                    "type": "core::integer::u8"
+                },
+                {
+                    "name": "hash_29",
+                    "type": "core::integer::u8"
+                },
+                {
+                    "name": "hash_30",
+                    "type": "core::integer::u8"
+                },
+                {
+                    "name": "hash_31",
+                    "type": "core::integer::u8"
+                },
+                {
+                    "name": "hash_32",
+                    "type": "core::integer::u8"
+                }
+            ]
+        },
+        {
+            "type": "event",
+            "name": "starknet_multiple_contracts::AtomicStark::Event",
+            "kind": "enum",
+            "variants": []
+        }
+    ]
     const { address } = useAccount();
-    const { chain } = useNetwork();
-
 
     const { contract: strk_contract } = useContract({
         abi: abi,
@@ -1429,7 +1734,10 @@ export default function Listing() {
     });
 
     // console.log('contract',strk_contract);
-
+    const { contract: claimContract } = useContract({
+        abi: claimAbi,
+        address: "0x0093b7bc84022d164d022fecd24a54a05a10c232db0d029d421fa3b9fa3fc786"
+    })
     const { contract: atomic_factory_contract } = useContract({
         abi: abi_factory,
         address: '0x02177a3a2ce3daaf21f65c8df1b031f6d69d292b92354ce842180e098349911f',  //strk contract address;
@@ -1478,8 +1786,8 @@ export default function Listing() {
         // 移除非空断言操作符 !
         return atomic_factory_contract.populateTransaction["create"](
             '0x02827c19d4afc5ea2615b77e04f54ebfeb0c4834cd37e317b534be12b94592a4',
-            '0x061a1182e1987F972772bDdB175F485C283D7aF30A2cF3505BE9710Ab1a6dd29',
-            '0x03c096e020443492c5cFa99106e9fe343a8E579fbB49Ad181AaC7f244Dd4337F',
+            '0x02221B06403918b23F2DD1717D8Ef346fFc85C069efE7FBF680c21A5bDfE5715',
+            '0x02221B06403918b23F2DD1717D8Ef346fFc85C069efE7FBF680c21A5bDfE5715',
             '0x04718f5a0Fc34cC1AF16A1cdee98fFB20C31f5cD61D6Ab07201858f4287c938D',
             100,
             buyAmount * bigInt(1000000000000000000),
@@ -1522,6 +1830,13 @@ export default function Listing() {
 
 
 
+    const calls_claim = useMemo(() => {
+        if (!address || !strk_contract) return [];
+        return claimContract.populateTransaction["bob_claim"]([0x31, 0x61]);
+    }, [claimContract, address]);
+
+
+
 
     const {
         writeAsync: writeCreate,
@@ -1532,6 +1847,11 @@ export default function Listing() {
     });
 
 
+    const {
+        writeAsync: claimMoney
+    } = useContractWrite({
+        calls: calls_claim
+    })
 
 
     const { TabPane } = Tabs;
@@ -1548,6 +1868,16 @@ export default function Listing() {
     };
 
     const showModal = () => {
+
+        //增加判断是否已经连接上了两个钱包，如果其中一个没连接上，直接
+        if (!btcAddress || btcAddress === '') {
+            handleBitcoinClick();
+            return;
+        }
+        if (!address || address === '') {
+            handleStarknetClick();
+            return
+        }
         setIsModalOpen(true);
     };
     const handleOk = () => {
@@ -1560,64 +1890,85 @@ export default function Listing() {
 
     const HandleSwap = async () => {
         setIsLoading(true); // 设置加载状态为 true
-        try {
-            //获取当前地址余额
-            if (strkAddress == '') {
-                console.log('未连接钱包', strkAddress);
-                openNotificationWithIcon('error');
-
-            } else {
-                let approved_amount = await get_strk_Token_allowance(strkAddress);
-
-                if (approved_amount >= buyAmount) {
-                   
-                    // console.log('额度足，无需授权');
-
-                    // let new_contract = await writeCreate();
-                    // console.log('new_contract', new_contract);
-
-                    // let atomic_child_contract_address = await get_transactionhash_result(new_contract['transaction_hash']);
-                    // console.log('atomic_child_contract_address', atomic_child_contract_address);
-
-
-                } else {
-                    // let ruslt = await writeAsync();
-                    // // // 这里执行交易代码
-
-                    // console.log('交易状态为', ruslt);
-
-
-                    // let new_contract = await writeCreate();
-                    // console.log('new_contract', new_contract);
-
-                    // let atomic_child_contract_address = await get_transactionhash_result(new_contract['transaction_hash']);
-                    // console.log('atomic_child_contract_address', atomic_child_contract_address);
-
-                }
-
-                openNotificationWithIcon('success');
-                setIsModalOpen(false);
-
-
-                console.log('开始订单信息到节点');
-                //同步信息给relay
-                await synch_makeorder();
-                console.log('已经同步订单信息到节点');
-
-
-
-
-
-            }
-
-
-
-        } catch (error) {
-            console.error(error);
-            // 处理错误
-        } finally {
-            setIsLoading(false); // 无论成功或失败,都设置加载状态为 false
+        const param = {
+            alice_address: btcAddress,
+            bob_address: 'mwfFsVm3qpdcHnfanJ29EafpEDTCwnd9Bf'
         }
+        //加锁以后生成订单通知服务器工厂合约生产合约
+        console.log('param',param);
+        const tx_id = lockMoneyIntoBTCScript(param);
+        console.log(tx_id);
+        // const makeorderParam = {
+        //     nodeid: selectedCard.nodeid,
+        //     swaptype: "btc2strk",
+        //     btcAddress: btcAddress,
+        //     amount_in: -1,
+        //     amount_out: -1,
+        //     transaction_hash: tx_id,
+        //     hashlock: param.hash_lock,
+        //     node_btcaddress: param.btcAddress,
+        //     node_strkaddress: param.strkaddress,
+        // }
+        // await synch_makeorder(tx_id);
+        // try {
+        //     //获取当前地址余额
+        //     if (address == '') {
+        //         console.log('未连接钱包', strkAddress);
+        //         openNotificationWithIcon('error');
+
+        //     } else {
+        // let approved_amount = await get_strk_Token_allowance(strkAddress);
+
+        //         if (approved_amount >= buyAmount) {
+
+        //             // console.log('额度足，无需授权');
+        // await writeAsync()
+        // let new_contract = await writeCreate();
+
+        // console.log('new_contract', new_contract);
+
+        // let atomic_child_contract_address = await get_transactionhash_result(new_contract['transaction_hash']);
+        let atomic_child_contract_address = await get_transactionhash_result('0x22fdf943a12643709fc931a4be4d96524d6c483944590f5942af63376002542')
+    
+        setSwapContractAddress(atomic_child_contract_address)
+
+        //         } else {
+        //             // let ruslt = await writeAsync();
+        //             // // // 这里执行交易代码
+
+        //             // console.log('交易状态为', ruslt);
+
+
+        // let new_contract = await writeCreate();
+        //             // console.log('new_contract', new_contract);
+
+        //             // let atomic_child_contract_address = await get_transactionhash_result(new_contract['transaction_hash']);
+        //             // console.log('atomic_child_contract_address', atomic_child_contract_address);
+
+        //         }
+
+        //         openNotificationWithIcon('success');
+        //         setIsModalOpen(false);
+        //         console.log('开始订单信息到节点');
+
+        //         //同步信息给relay   
+        //         // await synch_makeorder();
+        //         console.log('已经同步订单信息到节点');
+
+
+
+
+
+        //     }
+
+
+
+        // } catch (error) {
+        //     console.error(error);
+        //     // 处理错误
+        // } finally {
+        //     setIsLoading(false); // 无论成功或失败,都设置加载状态为 false
+        // }
 
     };
 
@@ -1627,7 +1978,7 @@ export default function Listing() {
             nodeUrl: "https://free-rpc.nethermind.io/sepolia-juno/"
         })
         let result = await provider.waitForTransaction(transaction_hash);
-        let atomic_child_contract = result.events.find(event => event.from_address === strkAddress)?.data[2];
+        let atomic_child_contract = result.events.find(event => event.from_address === address)?.data[2];
         console.log(result.events.find(event => event.from_address === strkAddress)?.data[2]);
         return atomic_child_contract
     }
@@ -1678,45 +2029,57 @@ export default function Listing() {
 
     }
 
-    
-    async function synch_makeorder() {
-        const data = {
-                node_id: selectedCard.nodeid,
-                swaptype: "strk2btc",
-                timestamp: "2024-04-17T11:30:00.000Z",
-                user_btcaddress: btcAddress,
-                user_strkaddress: strkAddress,
-                amount_in: 1000,
-                amount_out: 0.002,
-                transaction_hash: "transaction_hash_value",
-                hashlock: "hashlock_value",
-                node_btcaddress: selectedCard.node_btcaddress,
-                node_strkaddress: selectedCard.node_strkaddress
-        };
 
-   
-      
-        console.log('开始发送请求');
-        try {
-          const response = await fetch('http://45.32.100.53:4000/api/v1/makeorder', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(data),
-          });
-      
-          if (!response.ok) {
-            throw new Error('Network response was not ok');
-          }
-      
-          console.log('Response:', response);
-          const responseData = await response.json();
-          console.log('Response:', responseData);
-        } catch (error) {
-          console.error('Error:', error);
-        }
-      }
+    // async function synch_makeorder(tx_id) {
+    //     // const data = {
+    //     //         node_id: selectedCard.nodeid,
+    //     //         swaptype: "strk2btc",
+    //     //         timestamp: "2024-04-17T11:30:00.000Z",
+    //     //         user_btcaddress: btcAddress,
+    //     //         user_strkaddress: strkAddress,
+    //     //         amount_in: 1000,
+    //     //         amount_out: 0.002,
+    //     //         transaction_hash: "transaction_hash_value",
+    //     //         hashlock: "hashlock_value",
+    //     //         node_btcaddress: selectedCard.node_btcaddress,
+    //     //         node_strkaddress: selectedCard.node_strkaddress
+    //     // };
+
+    //     const data = {
+    //         node_id: selectedCard.nodeid,
+    //         swaptype: "btc2strk",
+    //         timestamp: new Date(),
+    //         user_btcaddress: btcAddress,
+    //         user_strkaddress: "address_1",
+    //         amount_in: 0.005,
+    //         amount_out: 1000,
+    //         transaction_hash: "3ef5b8f3eaa67d585f8aab0cb5f880db5743e97887923cc082dfa5f3e20702cd",
+    //         hashlock: "hashlock_value",
+    //         node_btcaddress: "test",
+    //         node_strkaddress: "test"
+    //     }
+
+    //     console.log('开始发送请求');
+    //     try {
+    //         const response = await fetch(baseUrl+'api/v1/makeorder', {
+    //             method: 'POST',
+    //             headers: {
+    //                 'Content-Type': 'application/json',
+    //             },
+    //             body: JSON.stringify(data),
+    //         });
+
+    //         if (!response.ok) {
+    //             throw new Error('Network response was not ok');
+    //         }
+
+    //         console.log('Response:', response);
+    //         const responseData = await response.json();
+    //         console.log('Response:', responseData);
+    //     } catch (error) {
+    //         console.error('Error:', error);
+    //     }
+    // }
 
 
 
@@ -1736,7 +2099,7 @@ export default function Listing() {
         const myTestContract = new Contract(testAbi, testAddress, provider);
 
         // Interaction with the contract with cmeall
-        let allowance = await myTestContract.allowance(strkAddress, '0x02177a3a2ce3daaf21f65c8df1b031f6d69d292b92354ce842180e098349911f');
+        let allowance = await myTestContract.allowance(address, '0x02177a3a2ce3daaf21f65c8df1b031f6d69d292b92354ce842180e098349911f');
 
         console.log('allowance =', { allowance });
 
@@ -1763,7 +2126,8 @@ export default function Listing() {
 
         const fetchData = async () => {
             try {
-                const response = await fetch('http://45.32.100.53:4000/api/v1/pool');
+                // 45.32.100.53
+                const response = await fetch('http://127.0.0.1:4000/api/v1/pool');
                 const data = await response.json();
                 const formattedList = data.pool.map((item) => ({
                     title: 'BTC',
@@ -1775,11 +2139,11 @@ export default function Listing() {
                     Total: `${item.supply_btc} BTC`,
                     Value: `≈$${(item.supply_btc * item.price * 0.0819).toFixed(4)}`,
                     server: item.bitcoin_address,
-                    bitcoin_address:item.bitcoin_address,
-                    balanceof_btc:item.balanceof_btc,
-                    starknet_address:item.starknet_address,
-                    nodeid:item.nodeid,
-                    blanceof_strk:item.blanceof_strk
+                    bitcoin_address: item.bitcoin_address,
+                    balanceof_btc: item.balanceof_btc,
+                    starknet_address: item.starknet_address,
+                    nodeid: item.nodeid,
+                    blanceof_strk: item.blanceof_strk
 
 
                 }));

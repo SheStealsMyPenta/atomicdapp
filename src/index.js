@@ -13,7 +13,7 @@ import('./bitcoinjs-lib.js')
     var bitcoin = require('./bitcoinjs-lib.js')
     //bitcoin_js.bigi = require('bigi') // not available?
     console.log(bitcoin)
-    bitcoin.Buffer = require('safe-buffer').Buffer
+    bitcoin.Buffer = require('./safe-buffer').Buffer
 
     const TESTNET = bitcoin.networks.testnet;
 

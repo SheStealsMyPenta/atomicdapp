@@ -178,7 +178,7 @@
 }
 
 .lbot .lbox>div {
-    display: flex;
+    display: flex; 
     width: 100%;
     flex-wrap: nowrap;
     align-items: center;
