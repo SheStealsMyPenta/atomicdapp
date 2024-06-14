@@ -1,3 +1,4 @@
 # .eslintignore
 src/bitcoinjs-lib.js
 src/safe-buffer.js
+src/bundle.js

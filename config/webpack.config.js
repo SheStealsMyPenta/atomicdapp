@@ -85,6 +85,21 @@ const hasJsxRuntime = (() => {
   }
 })();
 
+// module.exports = {
+//   resolve: {
+//     fallback: {
+//       "stream": require.resolve("stream-browserify")
+//     }
+//   }
+// };
+// const NodePolyfillPlugin = require("node-polyfill-webpack-plugin")
+
+// module.exports = {
+//     // Other rules...
+//     plugins: [
+//         new NodePolyfillPlugin()
+//     ]
+// }
 // This is the production and development configuration.
 // It is focused on developer experience, fast rebuilds, and a minimal bundle.
 module.exports = function (webpackEnv) {
@@ -293,6 +308,10 @@ module.exports = function (webpackEnv) {
       ],
     },
     resolve: {
+      fallback: {
+        buffer: require.resolve("Buffer"),
+        stream: require.resolve("stream-browserify"),
+      },
       // This allows you to set a fallback for where webpack should look for modules.
       // We placed these paths second because we want `node_modules` to "win"
       // if there are any conflicts. This matches Node resolution mechanism.

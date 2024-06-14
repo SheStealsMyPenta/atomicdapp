@@ -17,7 +17,7 @@ export const WalletProvider = ({ children }) => {
     const [isStrkAddressDropdownOpen, setStrkAddressIsDropdownOpen] = useState(false);
     const [isBtcAddressDropdownOpen, setBtcAddressIsDropdownOpen] = useState(false);
     const [btcPrivateKey, setBtcPrivateKey] = useState('')
-
+    const [swapContractAddress,setSwapContractAddress]= useState('0x0093b7bc84022d164d022fecd24a54a05a10c232db0d029d421fa3b9fa3fc786')
     const {connect } = useConnect();
     const connectors = [
         new InjectedConnector({ options: { id: "argentX", name: "Argent X" } }),
@@ -199,7 +199,7 @@ export const WalletProvider = ({ children }) => {
         btcPrivateKey,
         setStrkAddressIsDropdownOpen,
         setBtcAddressIsDropdownOpen,
-
+        setSwapContractAddress,
         isStrkAddressDropdownOpen,
         isBtcAddressDropdownOpen,
 
@@ -207,6 +207,7 @@ export const WalletProvider = ({ children }) => {
         CloseConnectStarknet,
         setContextBtcPrivateKey,
         handleBitcoinClick,
+        swapContractAddress,
 
     };
 
