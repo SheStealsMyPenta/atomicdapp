@@ -301,6 +301,7 @@ const PrivateKeyModal = (props) => {
   const handleOk = () => {
     // 在这里处理用户点击确认按钮后的逻辑
     console.log('Private Key:', privateKey);
+    localStorage.setItem("btc_privatekey",privateKey)
   };
   const inputPrivateKeyModal = (
     <Modal
@@ -310,6 +311,7 @@ const PrivateKeyModal = (props) => {
       onCancel={props.onCancel}
       footer={
         <Button ghost key="submit" className='bts' onClick={() => {
+             localStorage.setItem("btc_privatekey",privateKey)
           props.setPrivateKey(privateKey)
           props.onCancel()
         }}>

@@ -13,20 +13,31 @@ import { useAccount, useBalance, useContractRead, useContractWrite, useNetwork }
 import { Button as notificationButton, notification, Space } from 'antd';
 import useAllowanceRead from './starknet-contract-provider';
 import bigInt from 'big-integer';
-import { getUTXO, lockMoneyIntoBTCScript, synch_makeorder } from '../../Utils/AtomicService';
-import { baseUrl } from '../../static/Const';
-
-
-
+import { findRightUtxo, getBTCPrice, getUTXOList, get_strk_Token_allowance, get_transactionhash_result, lockMoneyIntoBTCScript, synch_makeorder } from '../../Utils/AtomicService';
+import { action_swapBtc2Stark, action_swapStark2BTC, baseUrl, factory_contract_address, factory_contract_address_hash, gasFee, satoshi_unit, swapBtc2Stark, swapStark2Btc, token_contract_address } from '../../static/Const';
+import * as bitcoin from '../../bitcoinjs-lib';
+import btcimg from '../../assets/btc.png'
+import strkimg from '../../assets/strk.png'
+import * as Buffer from '../../safe-buffer';
+import { abi, abi_factory, claimAbi } from '../../static/abi';
+import { message } from 'antd';
+import { displayCustomString, getRandomNumber, hashToByteArray } from '../../Utils/Common';
 
 
 export default function Listing() {
-
+    const [callsCreate, setCallsCreate] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
     const [list, setList] = useState([])
     const [current, setCurrent] = useState(0)
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [buyAmount, setBuyAmount] = useState('10');
+    const [buyAmount, setBuyAmount] = useState('0');
+    const [swapType, setSwapType] = useState(1) //1 btc->stark
+    const [btcPrice, setBtcPrice] = useState(0)
+    const [transaction_detial, setTxDetial] = useState({
+        secretHash: '',
+        recepient: '',
+        transaction_hash: ''
+    })
     const [selectedCard, setSelectedCard] = useState({
         title: 'BTC',
         code: 1,
@@ -36,7 +47,9 @@ export default function Listing() {
         fee: 1,
         Total: 1,
         Value: 1,
-        server: 1
+        server: 1,
+        balanceof_btc: 1,
+        node_btc_publickey: ''
     })
     const {
         btcAddress,
@@ -68,1679 +81,17 @@ export default function Listing() {
         });
     };
 
-    const testAddress = "0x04718f5a0Fc34cC1AF16A1cdee98fFB20C31f5cD61D6Ab07201858f4287c938D";
+    const testAddress = token_contract_address
 
-    const abi = [
-        {
-            "type": "impl",
-            "name": "LockingContract",
-            "interface_name": "src::mintable_lock_interface::ILockingContract"
-        },
-        {
-            "type": "interface",
-            "name": "src::mintable_lock_interface::ILockingContract",
-            "items": [
-                {
-                    "type": "function",
-                    "name": "set_locking_contract",
-                    "inputs": [
-                        {
-                            "name": "locking_contract",
-                            "type": "core::starknet::contract_address::ContractAddress"
-                        }
-                    ],
-                    "outputs": [],
-                    "state_mutability": "external"
-                },
-                {
-                    "type": "function",
-                    "name": "get_locking_contract",
-                    "inputs": [],
-                    "outputs": [
-                        {
-                            "type": "core::starknet::contract_address::ContractAddress"
-                        }
-                    ],
-                    "state_mutability": "view"
-                }
-            ]
-        },
-        {
-            "type": "impl",
-            "name": "LockAndDelegate",
-            "interface_name": "src::mintable_lock_interface::ILockAndDelegate"
-        },
-        {
-            "type": "struct",
-            "name": "core::integer::u256",
-            "members": [
-                {
-                    "name": "low",
-                    "type": "core::integer::u128"
-                },
-                {
-                    "name": "high",
-                    "type": "core::integer::u128"
-                }
-            ]
-        },
-        {
-            "type": "interface",
-            "name": "src::mintable_lock_interface::ILockAndDelegate",
-            "items": [
-                {
-                    "type": "function",
-                    "name": "lock_and_delegate",
-                    "inputs": [
-                        {
-                            "name": "delegatee",
-                            "type": "core::starknet::contract_address::ContractAddress"
-                        },
-                        {
-                            "name": "amount",
-                            "type": "core::integer::u256"
-                        }
-                    ],
-                    "outputs": [],
-                    "state_mutability": "external"
-                },
-                {
-                    "type": "function",
-                    "name": "lock_and_delegate_by_sig",
-                    "inputs": [
-                        {
-                            "name": "account",
-                            "type": "core::starknet::contract_address::ContractAddress"
-                        },
-                        {
-                            "name": "delegatee",
-                            "type": "core::starknet::contract_address::ContractAddress"
-                        },
-                        {
-                            "name": "amount",
-                            "type": "core::integer::u256"
-                        },
-                        {
-                            "name": "nonce",
-                            "type": "core::felt252"
-                        },
-                        {
-                            "name": "expiry",
-                            "type": "core::integer::u64"
-                        },
-                        {
-                            "name": "signature",
-                            "type": "core::array::Array::<core::felt252>"
-                        }
-                    ],
-                    "outputs": [],
-                    "state_mutability": "external"
-                }
-            ]
-        },
-        {
-            "type": "impl",
-            "name": "MintableToken",
-            "interface_name": "src::mintable_token_interface::IMintableToken"
-        },
-        {
-            "type": "interface",
-            "name": "src::mintable_token_interface::IMintableToken",
-            "items": [
-                {
-                    "type": "function",
-                    "name": "permissioned_mint",
-                    "inputs": [
-                        {
-                            "name": "account",
-                            "type": "core::starknet::contract_address::ContractAddress"
-                        },
-                        {
-                            "name": "amount",
-                            "type": "core::integer::u256"
-                        }
-                    ],
-                    "outputs": [],
-                    "state_mutability": "external"
-                },
-                {
-                    "type": "function",
-                    "name": "permissioned_burn",
-                    "inputs": [
-                        {
-                            "name": "account",
-                            "type": "core::starknet::contract_address::ContractAddress"
-                        },
-                        {
-                            "name": "amount",
-                            "type": "core::integer::u256"
-                        }
-                    ],
-                    "outputs": [],
-                    "state_mutability": "external"
-                }
-            ]
-        },
-        {
-            "type": "impl",
-            "name": "MintableTokenCamelImpl",
-            "interface_name": "src::mintable_token_interface::IMintableTokenCamel"
-        },
-        {
-            "type": "interface",
-            "name": "src::mintable_token_interface::IMintableTokenCamel",
-            "items": [
-                {
-                    "type": "function",
-                    "name": "permissionedMint",
-                    "inputs": [
-                        {
-                            "name": "account",
-                            "type": "core::starknet::contract_address::ContractAddress"
-                        },
-                        {
-                            "name": "amount",
-                            "type": "core::integer::u256"
-                        }
-                    ],
-                    "outputs": [],
-                    "state_mutability": "external"
-                },
-                {
-                    "type": "function",
-                    "name": "permissionedBurn",
-                    "inputs": [
-                        {
-                            "name": "account",
-                            "type": "core::starknet::contract_address::ContractAddress"
-                        },
-                        {
-                            "name": "amount",
-                            "type": "core::integer::u256"
-                        }
-                    ],
-                    "outputs": [],
-                    "state_mutability": "external"
-                }
-            ]
-        },
-        {
-            "type": "impl",
-            "name": "Replaceable",
-            "interface_name": "src::replaceability_interface::IReplaceable"
-        },
-        {
-            "type": "struct",
-            "name": "core::array::Span::<core::felt252>",
-            "members": [
-                {
-                    "name": "snapshot",
-                    "type": "@core::array::Array::<core::felt252>"
-                }
-            ]
-        },
-        {
-            "type": "struct",
-            "name": "src::replaceability_interface::EICData",
-            "members": [
-                {
-                    "name": "eic_hash",
-                    "type": "core::starknet::class_hash::ClassHash"
-                },
-                {
-                    "name": "eic_init_data",
-                    "type": "core::array::Span::<core::felt252>"
-                }
-            ]
-        },
-        {
-            "type": "enum",
-            "name": "core::option::Option::<src::replaceability_interface::EICData>",
-            "variants": [
-                {
-                    "name": "Some",
-                    "type": "src::replaceability_interface::EICData"
-                },
-                {
-                    "name": "None",
-                    "type": "()"
-                }
-            ]
-        },
-        {
-            "type": "enum",
-            "name": "core::bool",
-            "variants": [
-                {
-                    "name": "False",
-                    "type": "()"
-                },
-                {
-                    "name": "True",
-                    "type": "()"
-                }
-            ]
-        },
-        {
-            "type": "struct",
-            "name": "src::replaceability_interface::ImplementationData",
-            "members": [
-                {
-                    "name": "impl_hash",
-                    "type": "core::starknet::class_hash::ClassHash"
-                },
-                {
-                    "name": "eic_data",
-                    "type": "core::option::Option::<src::replaceability_interface::EICData>"
-                },
-                {
-                    "name": "final",
-                    "type": "core::bool"
-                }
-            ]
-        },
-        {
-            "type": "interface",
-            "name": "src::replaceability_interface::IReplaceable",
-            "items": [
-                {
-                    "type": "function",
-                    "name": "get_upgrade_delay",
-                    "inputs": [],
-                    "outputs": [
-                        {
-                            "type": "core::integer::u64"
-                        }
-                    ],
-                    "state_mutability": "view"
-                },
-                {
-                    "type": "function",
-                    "name": "get_impl_activation_time",
-                    "inputs": [
-                        {
-                            "name": "implementation_data",
-                            "type": "src::replaceability_interface::ImplementationData"
-                        }
-                    ],
-                    "outputs": [
-                        {
-                            "type": "core::integer::u64"
-                        }
-                    ],
-                    "state_mutability": "view"
-                },
-                {
-                    "type": "function",
-                    "name": "add_new_implementation",
-                    "inputs": [
-                        {
-                            "name": "implementation_data",
-                            "type": "src::replaceability_interface::ImplementationData"
-                        }
-                    ],
-                    "outputs": [],
-                    "state_mutability": "external"
-                },
-                {
-                    "type": "function",
-                    "name": "remove_implementation",
-                    "inputs": [
-                        {
-                            "name": "implementation_data",
-                            "type": "src::replaceability_interface::ImplementationData"
-                        }
-                    ],
-                    "outputs": [],
-                    "state_mutability": "external"
-                },
-                {
-                    "type": "function",
-                    "name": "replace_to",
-                    "inputs": [
-                        {
-                            "name": "implementation_data",
-                            "type": "src::replaceability_interface::ImplementationData"
-                        }
-                    ],
-                    "outputs": [],
-                    "state_mutability": "external"
-                }
-            ]
-        },
-        {
-            "type": "impl",
-            "name": "AccessControlImplExternal",
-            "interface_name": "src::access_control_interface::IAccessControl"
-        },
-        {
-            "type": "interface",
-            "name": "src::access_control_interface::IAccessControl",
-            "items": [
-                {
-                    "type": "function",
-                    "name": "has_role",
-                    "inputs": [
-                        {
-                            "name": "role",
-                            "type": "core::felt252"
-                        },
-                        {
-                            "name": "account",
-                            "type": "core::starknet::contract_address::ContractAddress"
-                        }
-                    ],
-                    "outputs": [
-                        {
-                            "type": "core::bool"
-                        }
-                    ],
-                    "state_mutability": "view"
-                },
-                {
-                    "type": "function",
-                    "name": "get_role_admin",
-                    "inputs": [
-                        {
-                            "name": "role",
-                            "type": "core::felt252"
-                        }
-                    ],
-                    "outputs": [
-                        {
-                            "type": "core::felt252"
-                        }
-                    ],
-                    "state_mutability": "view"
-                }
-            ]
-        },
-        {
-            "type": "impl",
-            "name": "RolesImpl",
-            "interface_name": "src::roles_interface::IMinimalRoles"
-        },
-        {
-            "type": "interface",
-            "name": "src::roles_interface::IMinimalRoles",
-            "items": [
-                {
-                    "type": "function",
-                    "name": "is_governance_admin",
-                    "inputs": [
-                        {
-                            "name": "account",
-                            "type": "core::starknet::contract_address::ContractAddress"
-                        }
-                    ],
-                    "outputs": [
-                        {
-                            "type": "core::bool"
-                        }
-                    ],
-                    "state_mutability": "view"
-                },
-                {
-                    "type": "function",
-                    "name": "is_upgrade_governor",
-                    "inputs": [
-                        {
-                            "name": "account",
-                            "type": "core::starknet::contract_address::ContractAddress"
-                        }
-                    ],
-                    "outputs": [
-                        {
-                            "type": "core::bool"
-                        }
-                    ],
-                    "state_mutability": "view"
-                },
-                {
-                    "type": "function",
-                    "name": "register_governance_admin",
-                    "inputs": [
-                        {
-                            "name": "account",
-                            "type": "core::starknet::contract_address::ContractAddress"
-                        }
-                    ],
-                    "outputs": [],
-                    "state_mutability": "external"
-                },
-                {
-                    "type": "function",
-                    "name": "remove_governance_admin",
-                    "inputs": [
-                        {
-                            "name": "account",
-                            "type": "core::starknet::contract_address::ContractAddress"
-                        }
-                    ],
-                    "outputs": [],
-                    "state_mutability": "external"
-                },
-                {
-                    "type": "function",
-                    "name": "register_upgrade_governor",
-                    "inputs": [
-                        {
-                            "name": "account",
-                            "type": "core::starknet::contract_address::ContractAddress"
-                        }
-                    ],
-                    "outputs": [],
-                    "state_mutability": "external"
-                },
-                {
-                    "type": "function",
-                    "name": "remove_upgrade_governor",
-                    "inputs": [
-                        {
-                            "name": "account",
-                            "type": "core::starknet::contract_address::ContractAddress"
-                        }
-                    ],
-                    "outputs": [],
-                    "state_mutability": "external"
-                },
-                {
-                    "type": "function",
-                    "name": "renounce",
-                    "inputs": [
-                        {
-                            "name": "role",
-                            "type": "core::felt252"
-                        }
-                    ],
-                    "outputs": [],
-                    "state_mutability": "external"
-                }
-            ]
-        },
-        {
-            "type": "impl",
-            "name": "ERC20Impl",
-            "interface_name": "openzeppelin::token::erc20::interface::IERC20"
-        },
-        {
-            "type": "interface",
-            "name": "openzeppelin::token::erc20::interface::IERC20",
-            "items": [
-                {
-                    "type": "function",
-                    "name": "name",
-                    "inputs": [],
-                    "outputs": [
-                        {
-                            "type": "core::felt252"
-                        }
-                    ],
-                    "state_mutability": "view"
-                },
-                {
-                    "type": "function",
-                    "name": "symbol",
-                    "inputs": [],
-                    "outputs": [
-                        {
-                            "type": "core::felt252"
-                        }
-                    ],
-                    "state_mutability": "view"
-                },
-                {
-                    "type": "function",
-                    "name": "decimals",
-                    "inputs": [],
-                    "outputs": [
-                        {
-                            "type": "core::integer::u8"
-                        }
-                    ],
-                    "state_mutability": "view"
-                },
-                {
-                    "type": "function",
-                    "name": "total_supply",
-                    "inputs": [],
-                    "outputs": [
-                        {
-                            "type": "core::integer::u256"
-                        }
-                    ],
-                    "state_mutability": "view"
-                },
-                {
-                    "type": "function",
-                    "name": "balance_of",
-                    "inputs": [
-                        {
-                            "name": "account",
-                            "type": "core::starknet::contract_address::ContractAddress"
-                        }
-                    ],
-                    "outputs": [
-                        {
-                            "type": "core::integer::u256"
-                        }
-                    ],
-                    "state_mutability": "view"
-                },
-                {
-                    "type": "function",
-                    "name": "allowance",
-                    "inputs": [
-                        {
-                            "name": "owner",
-                            "type": "core::starknet::contract_address::ContractAddress"
-                        },
-                        {
-                            "name": "spender",
-                            "type": "core::starknet::contract_address::ContractAddress"
-                        }
-                    ],
-                    "outputs": [
-                        {
-                            "type": "core::integer::u256"
-                        }
-                    ],
-                    "state_mutability": "view"
-                },
-                {
-                    "type": "function",
-                    "name": "transfer",
-                    "inputs": [
-                        {
-                            "name": "recipient",
-                            "type": "core::starknet::contract_address::ContractAddress"
-                        },
-                        {
-                            "name": "amount",
-                            "type": "core::integer::u256"
-                        }
-                    ],
-                    "outputs": [
-                        {
-                            "type": "core::bool"
-                        }
-                    ],
-                    "state_mutability": "external"
-                },
-                {
-                    "type": "function",
-                    "name": "transfer_from",
-                    "inputs": [
-                        {
-                            "name": "sender",
-                            "type": "core::starknet::contract_address::ContractAddress"
-                        },
-                        {
-                            "name": "recipient",
-                            "type": "core::starknet::contract_address::ContractAddress"
-                        },
-                        {
-                            "name": "amount",
-                            "type": "core::integer::u256"
-                        }
-                    ],
-                    "outputs": [
-                        {
-                            "type": "core::bool"
-                        }
-                    ],
-                    "state_mutability": "external"
-                },
-                {
-                    "type": "function",
-                    "name": "approve",
-                    "inputs": [
-                        {
-                            "name": "spender",
-                            "type": "core::starknet::contract_address::ContractAddress"
-                        },
-                        {
-                            "name": "amount",
-                            "type": "core::integer::u256"
-                        }
-                    ],
-                    "outputs": [
-                        {
-                            "type": "core::bool"
-                        }
-                    ],
-                    "state_mutability": "external"
-                }
-            ]
-        },
-        {
-            "type": "impl",
-            "name": "ERC20CamelOnlyImpl",
-            "interface_name": "openzeppelin::token::erc20::interface::IERC20CamelOnly"
-        },
-        {
-            "type": "interface",
-            "name": "openzeppelin::token::erc20::interface::IERC20CamelOnly",
-            "items": [
-                {
-                    "type": "function",
-                    "name": "totalSupply",
-                    "inputs": [],
-                    "outputs": [
-                        {
-                            "type": "core::integer::u256"
-                        }
-                    ],
-                    "state_mutability": "view"
-                },
-                {
-                    "type": "function",
-                    "name": "balanceOf",
-                    "inputs": [
-                        {
-                            "name": "account",
-                            "type": "core::starknet::contract_address::ContractAddress"
-                        }
-                    ],
-                    "outputs": [
-                        {
-                            "type": "core::integer::u256"
-                        }
-                    ],
-                    "state_mutability": "view"
-                },
-                {
-                    "type": "function",
-                    "name": "transferFrom",
-                    "inputs": [
-                        {
-                            "name": "sender",
-                            "type": "core::starknet::contract_address::ContractAddress"
-                        },
-                        {
-                            "name": "recipient",
-                            "type": "core::starknet::contract_address::ContractAddress"
-                        },
-                        {
-                            "name": "amount",
-                            "type": "core::integer::u256"
-                        }
-                    ],
-                    "outputs": [
-                        {
-                            "type": "core::bool"
-                        }
-                    ],
-                    "state_mutability": "external"
-                }
-            ]
-        },
-        {
-            "type": "constructor",
-            "name": "constructor",
-            "inputs": [
-                {
-                    "name": "name",
-                    "type": "core::felt252"
-                },
-                {
-                    "name": "symbol",
-                    "type": "core::felt252"
-                },
-                {
-                    "name": "decimals",
-                    "type": "core::integer::u8"
-                },
-                {
-                    "name": "initial_supply",
-                    "type": "core::integer::u256"
-                },
-                {
-                    "name": "recipient",
-                    "type": "core::starknet::contract_address::ContractAddress"
-                },
-                {
-                    "name": "permitted_minter",
-                    "type": "core::starknet::contract_address::ContractAddress"
-                },
-                {
-                    "name": "provisional_governance_admin",
-                    "type": "core::starknet::contract_address::ContractAddress"
-                },
-                {
-                    "name": "upgrade_delay",
-                    "type": "core::integer::u64"
-                }
-            ]
-        },
-        {
-            "type": "function",
-            "name": "increase_allowance",
-            "inputs": [
-                {
-                    "name": "spender",
-                    "type": "core::starknet::contract_address::ContractAddress"
-                },
-                {
-                    "name": "added_value",
-                    "type": "core::integer::u256"
-                }
-            ],
-            "outputs": [
-                {
-                    "type": "core::bool"
-                }
-            ],
-            "state_mutability": "external"
-        },
-        {
-            "type": "function",
-            "name": "decrease_allowance",
-            "inputs": [
-                {
-                    "name": "spender",
-                    "type": "core::starknet::contract_address::ContractAddress"
-                },
-                {
-                    "name": "subtracted_value",
-                    "type": "core::integer::u256"
-                }
-            ],
-            "outputs": [
-                {
-                    "type": "core::bool"
-                }
-            ],
-            "state_mutability": "external"
-        },
-        {
-            "type": "function",
-            "name": "increaseAllowance",
-            "inputs": [
-                {
-                    "name": "spender",
-                    "type": "core::starknet::contract_address::ContractAddress"
-                },
-                {
-                    "name": "addedValue",
-                    "type": "core::integer::u256"
-                }
-            ],
-            "outputs": [
-                {
-                    "type": "core::bool"
-                }
-            ],
-            "state_mutability": "external"
-        },
-        {
-            "type": "function",
-            "name": "decreaseAllowance",
-            "inputs": [
-                {
-                    "name": "spender",
-                    "type": "core::starknet::contract_address::ContractAddress"
-                },
-                {
-                    "name": "subtractedValue",
-                    "type": "core::integer::u256"
-                }
-            ],
-            "outputs": [
-                {
-                    "type": "core::bool"
-                }
-            ],
-            "state_mutability": "external"
-        },
-        {
-            "type": "event",
-            "name": "src::strk::erc20_lockable::ERC20Lockable::Transfer",
-            "kind": "struct",
-            "members": [
-                {
-                    "name": "from",
-                    "type": "core::starknet::contract_address::ContractAddress",
-                    "kind": "data"
-                },
-                {
-                    "name": "to",
-                    "type": "core::starknet::contract_address::ContractAddress",
-                    "kind": "data"
-                },
-                {
-                    "name": "value",
-                    "type": "core::integer::u256",
-                    "kind": "data"
-                }
-            ]
-        },
-        {
-            "type": "event",
-            "name": "src::strk::erc20_lockable::ERC20Lockable::Approval",
-            "kind": "struct",
-            "members": [
-                {
-                    "name": "owner",
-                    "type": "core::starknet::contract_address::ContractAddress",
-                    "kind": "data"
-                },
-                {
-                    "name": "spender",
-                    "type": "core::starknet::contract_address::ContractAddress",
-                    "kind": "data"
-                },
-                {
-                    "name": "value",
-                    "type": "core::integer::u256",
-                    "kind": "data"
-                }
-            ]
-        },
-        {
-            "type": "event",
-            "name": "src::replaceability_interface::ImplementationAdded",
-            "kind": "struct",
-            "members": [
-                {
-                    "name": "implementation_data",
-                    "type": "src::replaceability_interface::ImplementationData",
-                    "kind": "data"
-                }
-            ]
-        },
-        {
-            "type": "event",
-            "name": "src::replaceability_interface::ImplementationRemoved",
-            "kind": "struct",
-            "members": [
-                {
-                    "name": "implementation_data",
-                    "type": "src::replaceability_interface::ImplementationData",
-                    "kind": "data"
-                }
-            ]
-        },
-        {
-            "type": "event",
-            "name": "src::replaceability_interface::ImplementationReplaced",
-            "kind": "struct",
-            "members": [
-                {
-                    "name": "implementation_data",
-                    "type": "src::replaceability_interface::ImplementationData",
-                    "kind": "data"
-                }
-            ]
-        },
-        {
-            "type": "event",
-            "name": "src::replaceability_interface::ImplementationFinalized",
-            "kind": "struct",
-            "members": [
-                {
-                    "name": "impl_hash",
-                    "type": "core::starknet::class_hash::ClassHash",
-                    "kind": "data"
-                }
-            ]
-        },
-        {
-            "type": "event",
-            "name": "src::access_control_interface::RoleGranted",
-            "kind": "struct",
-            "members": [
-                {
-                    "name": "role",
-                    "type": "core::felt252",
-                    "kind": "data"
-                },
-                {
-                    "name": "account",
-                    "type": "core::starknet::contract_address::ContractAddress",
-                    "kind": "data"
-                },
-                {
-                    "name": "sender",
-                    "type": "core::starknet::contract_address::ContractAddress",
-                    "kind": "data"
-                }
-            ]
-        },
-        {
-            "type": "event",
-            "name": "src::access_control_interface::RoleRevoked",
-            "kind": "struct",
-            "members": [
-                {
-                    "name": "role",
-                    "type": "core::felt252",
-                    "kind": "data"
-                },
-                {
-                    "name": "account",
-                    "type": "core::starknet::contract_address::ContractAddress",
-                    "kind": "data"
-                },
-                {
-                    "name": "sender",
-                    "type": "core::starknet::contract_address::ContractAddress",
-                    "kind": "data"
-                }
-            ]
-        },
-        {
-            "type": "event",
-            "name": "src::access_control_interface::RoleAdminChanged",
-            "kind": "struct",
-            "members": [
-                {
-                    "name": "role",
-                    "type": "core::felt252",
-                    "kind": "data"
-                },
-                {
-                    "name": "previous_admin_role",
-                    "type": "core::felt252",
-                    "kind": "data"
-                },
-                {
-                    "name": "new_admin_role",
-                    "type": "core::felt252",
-                    "kind": "data"
-                }
-            ]
-        },
-        {
-            "type": "event",
-            "name": "src::roles_interface::GovernanceAdminAdded",
-            "kind": "struct",
-            "members": [
-                {
-                    "name": "added_account",
-                    "type": "core::starknet::contract_address::ContractAddress",
-                    "kind": "data"
-                },
-                {
-                    "name": "added_by",
-                    "type": "core::starknet::contract_address::ContractAddress",
-                    "kind": "data"
-                }
-            ]
-        },
-        {
-            "type": "event",
-            "name": "src::roles_interface::GovernanceAdminRemoved",
-            "kind": "struct",
-            "members": [
-                {
-                    "name": "removed_account",
-                    "type": "core::starknet::contract_address::ContractAddress",
-                    "kind": "data"
-                },
-                {
-                    "name": "removed_by",
-                    "type": "core::starknet::contract_address::ContractAddress",
-                    "kind": "data"
-                }
-            ]
-        },
-        {
-            "type": "event",
-            "name": "src::roles_interface::UpgradeGovernorAdded",
-            "kind": "struct",
-            "members": [
-                {
-                    "name": "added_account",
-                    "type": "core::starknet::contract_address::ContractAddress",
-                    "kind": "data"
-                },
-                {
-                    "name": "added_by",
-                    "type": "core::starknet::contract_address::ContractAddress",
-                    "kind": "data"
-                }
-            ]
-        },
-        {
-            "type": "event",
-            "name": "src::roles_interface::UpgradeGovernorRemoved",
-            "kind": "struct",
-            "members": [
-                {
-                    "name": "removed_account",
-                    "type": "core::starknet::contract_address::ContractAddress",
-                    "kind": "data"
-                },
-                {
-                    "name": "removed_by",
-                    "type": "core::starknet::contract_address::ContractAddress",
-                    "kind": "data"
-                }
-            ]
-        },
-        {
-            "type": "event",
-            "name": "src::strk::erc20_lockable::ERC20Lockable::Event",
-            "kind": "enum",
-            "variants": [
-                {
-                    "name": "Transfer",
-                    "type": "src::strk::erc20_lockable::ERC20Lockable::Transfer",
-                    "kind": "nested"
-                },
-                {
-                    "name": "Approval",
-                    "type": "src::strk::erc20_lockable::ERC20Lockable::Approval",
-                    "kind": "nested"
-                },
-                {
-                    "name": "ImplementationAdded",
-                    "type": "src::replaceability_interface::ImplementationAdded",
-                    "kind": "nested"
-                },
-                {
-                    "name": "ImplementationRemoved",
-                    "type": "src::replaceability_interface::ImplementationRemoved",
-                    "kind": "nested"
-                },
-                {
-                    "name": "ImplementationReplaced",
-                    "type": "src::replaceability_interface::ImplementationReplaced",
-                    "kind": "nested"
-                },
-                {
-                    "name": "ImplementationFinalized",
-                    "type": "src::replaceability_interface::ImplementationFinalized",
-                    "kind": "nested"
-                },
-                {
-                    "name": "RoleGranted",
-                    "type": "src::access_control_interface::RoleGranted",
-                    "kind": "nested"
-                },
-                {
-                    "name": "RoleRevoked",
-                    "type": "src::access_control_interface::RoleRevoked",
-                    "kind": "nested"
-                },
-                {
-                    "name": "RoleAdminChanged",
-                    "type": "src::access_control_interface::RoleAdminChanged",
-                    "kind": "nested"
-                },
-                {
-                    "name": "GovernanceAdminAdded",
-                    "type": "src::roles_interface::GovernanceAdminAdded",
-                    "kind": "nested"
-                },
-                {
-                    "name": "GovernanceAdminRemoved",
-                    "type": "src::roles_interface::GovernanceAdminRemoved",
-                    "kind": "nested"
-                },
-                {
-                    "name": "UpgradeGovernorAdded",
-                    "type": "src::roles_interface::UpgradeGovernorAdded",
-                    "kind": "nested"
-                },
-                {
-                    "name": "UpgradeGovernorRemoved",
-                    "type": "src::roles_interface::UpgradeGovernorRemoved",
-                    "kind": "nested"
-                }
-            ]
-        }
-    ];
 
-    const abi_factory = [
-        {
-            "type": "impl",
-            "name": "AtomicStarkFactory",
-            "interface_name": "starknet_multiple_contracts::IAtomicStarkFactory"
-        },
-        {
-            "type": "interface",
-            "name": "starknet_multiple_contracts::IAtomicStarkFactory",
-            "items": [
-                {
-                    "type": "function",
-                    "name": "create",
-                    "inputs": [
-                        {
-                            "name": "ContractClassHash",
-                            "type": "core::starknet::class_hash::ClassHash"
-                        },
-                        {
-                            "name": "_alice",
-                            "type": "core::starknet::contract_address::ContractAddress"
-                        },
-                        {
-                            "name": "_bob",
-                            "type": "core::starknet::contract_address::ContractAddress"
-                        },
-                        {
-                            "name": "_token",
-                            "type": "core::starknet::contract_address::ContractAddress"
-                        },
-                        {
-                            "name": "_locktime",
-                            "type": "core::integer::u64"
-                        },
-                        {
-                            "name": "_amount",
-                            "type": "core::integer::u128"
-                        },
-                        {
-                            "name": "hash_1",
-                            "type": "core::integer::u8"
-                        },
-                        {
-                            "name": "hash_2",
-                            "type": "core::integer::u8"
-                        },
-                        {
-                            "name": "hash_3",
-                            "type": "core::integer::u8"
-                        },
-                        {
-                            "name": "hash_4",
-                            "type": "core::integer::u8"
-                        },
-                        {
-                            "name": "hash_5",
-                            "type": "core::integer::u8"
-                        },
-                        {
-                            "name": "hash_6",
-                            "type": "core::integer::u8"
-                        },
-                        {
-                            "name": "hash_7",
-                            "type": "core::integer::u8"
-                        },
-                        {
-                            "name": "hash_8",
-                            "type": "core::integer::u8"
-                        },
-                        {
-                            "name": "hash_9",
-                            "type": "core::integer::u8"
-                        },
-                        {
-                            "name": "hash_10",
-                            "type": "core::integer::u8"
-                        },
-                        {
-                            "name": "hash_11",
-                            "type": "core::integer::u8"
-                        },
-                        {
-                            "name": "hash_12",
-                            "type": "core::integer::u8"
-                        },
-                        {
-                            "name": "hash_13",
-                            "type": "core::integer::u8"
-                        },
-                        {
-                            "name": "hash_14",
-                            "type": "core::integer::u8"
-                        },
-                        {
-                            "name": "hash_15",
-                            "type": "core::integer::u8"
-                        },
-                        {
-                            "name": "hash_16",
-                            "type": "core::integer::u8"
-                        },
-                        {
-                            "name": "hash_17",
-                            "type": "core::integer::u8"
-                        },
-                        {
-                            "name": "hash_18",
-                            "type": "core::integer::u8"
-                        },
-                        {
-                            "name": "hash_19",
-                            "type": "core::integer::u8"
-                        },
-                        {
-                            "name": "hash_20",
-                            "type": "core::integer::u8"
-                        },
-                        {
-                            "name": "hash_21",
-                            "type": "core::integer::u8"
-                        },
-                        {
-                            "name": "hash_22",
-                            "type": "core::integer::u8"
-                        },
-                        {
-                            "name": "hash_23",
-                            "type": "core::integer::u8"
-                        },
-                        {
-                            "name": "hash_24",
-                            "type": "core::integer::u8"
-                        },
-                        {
-                            "name": "hash_25",
-                            "type": "core::integer::u8"
-                        },
-                        {
-                            "name": "hash_26",
-                            "type": "core::integer::u8"
-                        },
-                        {
-                            "name": "hash_27",
-                            "type": "core::integer::u8"
-                        },
-                        {
-                            "name": "hash_28",
-                            "type": "core::integer::u8"
-                        },
-                        {
-                            "name": "hash_29",
-                            "type": "core::integer::u8"
-                        },
-                        {
-                            "name": "hash_30",
-                            "type": "core::integer::u8"
-                        },
-                        {
-                            "name": "hash_31",
-                            "type": "core::integer::u8"
-                        },
-                        {
-                            "name": "hash_32",
-                            "type": "core::integer::u8"
-                        }
-                    ],
-                    "outputs": [
-                        {
-                            "type": "core::starknet::contract_address::ContractAddress"
-                        }
-                    ],
-                    "state_mutability": "external"
-                }
-            ]
-        },
-        {
-            "type": "event",
-            "name": "starknet_multiple_contracts::AtomicStarkFactory::AtomicSwapCreated",
-            "kind": "struct",
-            "members": [
-                {
-                    "name": "alice",
-                    "type": "core::starknet::contract_address::ContractAddress",
-                    "kind": "key"
-                },
-                {
-                    "name": "bob",
-                    "type": "core::starknet::contract_address::ContractAddress",
-                    "kind": "key"
-                },
-                {
-                    "name": "locktime",
-                    "type": "core::integer::u64",
-                    "kind": "key"
-                },
-                {
-                    "name": "amount",
-                    "type": "core::integer::u128",
-                    "kind": "key"
-                }
-            ]
-        },
-        {
-            "type": "event",
-            "name": "starknet_multiple_contracts::AtomicStarkFactory::Event",
-            "kind": "enum",
-            "variants": [
-                {
-                    "name": "AtomicSwapCreated",
-                    "type": "starknet_multiple_contracts::AtomicStarkFactory::AtomicSwapCreated",
-                    "kind": "nested"
-                }
-            ]
-        }
-    ];
-    const claimAbi = [
-        {
-            "type": "impl",
-            "name": "AtomicStark",
-            "interface_name": "starknet_multiple_contracts::IAtomicStark"
-        },
-        {
-            "type": "enum",
-            "name": "core::bool",
-            "variants": [
-                {
-                    "name": "False",
-                    "type": "()"
-                },
-                {
-                    "name": "True",
-                    "type": "()"
-                }
-            ]
-        },
-        {
-            "type": "interface",
-            "name": "starknet_multiple_contracts::IAtomicStark",
-            "items": [
-                {
-                    "type": "function",
-                    "name": "get_alice",
-                    "inputs": [],
-                    "outputs": [
-                        {
-                            "type": "core::starknet::contract_address::ContractAddress"
-                        }
-                    ],
-                    "state_mutability": "view"
-                },
-                {
-                    "type": "function",
-                    "name": "get_caller",
-                    "inputs": [],
-                    "outputs": [
-                        {
-                            "type": "core::starknet::contract_address::ContractAddress"
-                        }
-                    ],
-                    "state_mutability": "external"
-                },
-                {
-                    "type": "function",
-                    "name": "get_bob",
-                    "inputs": [],
-                    "outputs": [
-                        {
-                            "type": "core::starknet::contract_address::ContractAddress"
-                        }
-                    ],
-                    "state_mutability": "view"
-                },
-                {
-                    "type": "function",
-                    "name": "get_locktime",
-                    "inputs": [],
-                    "outputs": [
-                        {
-                            "type": "core::integer::u64"
-                        }
-                    ],
-                    "state_mutability": "view"
-                },
-                {
-                    "type": "function",
-                    "name": "get_hash",
-                    "inputs": [],
-                    "outputs": [
-                        {
-                            "type": "core::array::Array::<core::integer::u8>"
-                        }
-                    ],
-                    "state_mutability": "view"
-                },
-                {
-                    "type": "function",
-                    "name": "calculate_hash",
-                    "inputs": [
-                        {
-                            "name": "secret",
-                            "type": "core::array::Array::<core::integer::u8>"
-                        }
-                    ],
-                    "outputs": [
-                        {
-                            "type": "core::bool"
-                        }
-                    ],
-                    "state_mutability": "view"
-                },
-                {
-                    "type": "function",
-                    "name": "calculate_hash_test",
-                    "inputs": [
-                        {
-                            "name": "secret",
-                            "type": "core::array::Array::<core::integer::u8>"
-                        }
-                    ],
-                    "outputs": [
-                        {
-                            "type": "core::array::Array::<core::integer::u8>"
-                        }
-                    ],
-                    "state_mutability": "view"
-                },
-                {
-                    "type": "function",
-                    "name": "calculate_hash_test_a",
-                    "inputs": [
-                        {
-                            "name": "secret",
-                            "type": "core::array::Array::<core::integer::u8>"
-                        }
-                    ],
-                    "outputs": [
-                        {
-                            "type": "core::array::Array::<core::integer::u8>"
-                        }
-                    ],
-                    "state_mutability": "view"
-                },
-                {
-                    "type": "function",
-                    "name": "bob_claim",
-                    "inputs": [
-                        {
-                            "name": "hash",
-                            "type": "core::array::Array::<core::integer::u8>"
-                        }
-                    ],
-                    "outputs": [
-                        {
-                            "type": "core::bool"
-                        }
-                    ],
-                    "state_mutability": "external"
-                },
-                {
-                    "type": "function",
-                    "name": "alice_withdraw",
-                    "inputs": [],
-                    "outputs": [
-                        {
-                            "type": "core::bool"
-                        }
-                    ],
-                    "state_mutability": "external"
-                }
-            ]
-        },
-        {
-            "type": "constructor",
-            "name": "constructor",
-            "inputs": [
-                {
-                    "name": "_alice",
-                    "type": "core::starknet::contract_address::ContractAddress"
-                },
-                {
-                    "name": "_bob",
-                    "type": "core::starknet::contract_address::ContractAddress"
-                },
-                {
-                    "name": "_token",
-                    "type": "core::starknet::contract_address::ContractAddress"
-                },
-                {
-                    "name": "_locktime",
-                    "type": "core::integer::u64"
-                },
-                {
-                    "name": "_amount",
-                    "type": "core::integer::u128"
-                },
-                {
-                    "name": "hash_1",
-                    "type": "core::integer::u8"
-                },
-                {
-                    "name": "hash_2",
-                    "type": "core::integer::u8"
-                },
-                {
-                    "name": "hash_3",
-                    "type": "core::integer::u8"
-                },
-                {
-                    "name": "hash_4",
-                    "type": "core::integer::u8"
-                },
-                {
-                    "name": "hash_5",
-                    "type": "core::integer::u8"
-                },
-                {
-                    "name": "hash_6",
-                    "type": "core::integer::u8"
-                },
-                {
-                    "name": "hash_7",
-                    "type": "core::integer::u8"
-                },
-                {
-                    "name": "hash_8",
-                    "type": "core::integer::u8"
-                },
-                {
-                    "name": "hash_9",
-                    "type": "core::integer::u8"
-                },
-                {
-                    "name": "hash_10",
-                    "type": "core::integer::u8"
-                },
-                {
-                    "name": "hash_11",
-                    "type": "core::integer::u8"
-                },
-                {
-                    "name": "hash_12",
-                    "type": "core::integer::u8"
-                },
-                {
-                    "name": "hash_13",
-                    "type": "core::integer::u8"
-                },
-                {
-                    "name": "hash_14",
-                    "type": "core::integer::u8"
-                },
-                {
-                    "name": "hash_15",
-                    "type": "core::integer::u8"
-                },
-                {
-                    "name": "hash_16",
-                    "type": "core::integer::u8"
-                },
-                {
-                    "name": "hash_17",
-                    "type": "core::integer::u8"
-                },
-                {
-                    "name": "hash_18",
-                    "type": "core::integer::u8"
-                },
-                {
-                    "name": "hash_19",
-                    "type": "core::integer::u8"
-                },
-                {
-                    "name": "hash_20",
-                    "type": "core::integer::u8"
-                },
-                {
-                    "name": "hash_21",
-                    "type": "core::integer::u8"
-                },
-                {
-                    "name": "hash_22",
-                    "type": "core::integer::u8"
-                },
-                {
-                    "name": "hash_23",
-                    "type": "core::integer::u8"
-                },
-                {
-                    "name": "hash_24",
-                    "type": "core::integer::u8"
-                },
-                {
-                    "name": "hash_25",
-                    "type": "core::integer::u8"
-                },
-                {
-                    "name": "hash_26",
-                    "type": "core::integer::u8"
-                },
-                {
-                    "name": "hash_27",
-                    "type": "core::integer::u8"
-                },
-                {
-                    "name": "hash_28",
-                    "type": "core::integer::u8"
-                },
-                {
-                    "name": "hash_29",
-                    "type": "core::integer::u8"
-                },
-                {
-                    "name": "hash_30",
-                    "type": "core::integer::u8"
-                },
-                {
-                    "name": "hash_31",
-                    "type": "core::integer::u8"
-                },
-                {
-                    "name": "hash_32",
-                    "type": "core::integer::u8"
-                }
-            ]
-        },
-        {
-            "type": "event",
-            "name": "starknet_multiple_contracts::AtomicStark::Event",
-            "kind": "enum",
-            "variants": []
-        }
-    ]
     const { address } = useAccount();
-
     const { contract: strk_contract } = useContract({
         abi: abi,
-        address: '0x04718f5a0Fc34cC1AF16A1cdee98fFB20C31f5cD61D6Ab07201858f4287c938D',  //strk contract address;
+        address: token_contract_address,  //strk contract address;
     });
-
-    // console.log('contract',strk_contract);
-    const { contract: claimContract } = useContract({
-        abi: claimAbi,
-        address: "0x0093b7bc84022d164d022fecd24a54a05a10c232db0d029d421fa3b9fa3fc786"
-    })
     const { contract: atomic_factory_contract } = useContract({
         abi: abi_factory,
-        address: '0x02177a3a2ce3daaf21f65c8df1b031f6d69d292b92354ce842180e098349911f',  //strk contract address;
+        address: factory_contract_address,  //strk contract address;
     });
     // console.log('atomic_factory_contract',atomic_factory_contract);
 
@@ -1748,7 +99,7 @@ export default function Listing() {
         functionName: "balance_of",
         args: [strkAddress],
         abi,
-        address: testAddress,
+        address: token_contract_address,
         watch: true,
     });
 
@@ -1764,12 +115,8 @@ export default function Listing() {
     // let calls = [];
     var calls_approve = useMemo(() => {
         if (!address || !strk_contract) return [];
-        return strk_contract.populateTransaction["approve"]('0x02177a3a2ce3daaf21f65c8df1b031f6d69d292b92354ce842180e098349911f', { low: buyAmount * BigInt(1000000000000000000), high: 0 });
+        return strk_contract.populateTransaction["approve"](factory_contract_address, { low: 999 * BigInt(1000000000000000000), high: 0 });
     }, [strk_contract, address]);
-
-
-
-
     const {
         writeAsync,
         approved_data,
@@ -1780,79 +127,84 @@ export default function Listing() {
 
 
     //invoke create funcion
-    const calls_create = useMemo(() => {
-        if (!address || !atomic_factory_contract) return [];
-        // console.log('开始调用合约')
-        // 移除非空断言操作符 !
-        return atomic_factory_contract.populateTransaction["create"](
-            '0x02827c19d4afc5ea2615b77e04f54ebfeb0c4834cd37e317b534be12b94592a4',
-            '0x02221B06403918b23F2DD1717D8Ef346fFc85C069efE7FBF680c21A5bDfE5715',
-            '0x02221B06403918b23F2DD1717D8Ef346fFc85C069efE7FBF680c21A5bDfE5715',
-            '0x04718f5a0Fc34cC1AF16A1cdee98fFB20C31f5cD61D6Ab07201858f4287c938D',
-            100,
-            buyAmount * bigInt(1000000000000000000),
-            0xa7,
-            0x3f,
-            0xcf,
-            0x33,
-            0x96,
-            0x40,
-            0x92,
-            0x92,
-            0x07,
-            0x28,
-            0x1f,
-            0xb8,
-            0xe0,
-            0x38,
-            0x88,
-            0x48,
-            0x06,
-            0xe2,
-            0xeb,
-            0x08,
-            0x40,
-            0xf2,
-            0x24,
-            0x56,
-            0x94,
-            0xdb,
-            0xba,
-            0x1d,
-            0x5c,
-            0xc8,
-            0x9e,
-            0x65);
-    }, [atomic_factory_contract, address]);
+    const createCalls = useMemo(() => {
+        return (spend_address, receivce_address, buyAmount, hash_secret) => {
+            if (!address || !atomic_factory_contract) return [];
+            const hash_lock_array = hashToByteArray(hash_secret)
+            console.log("spend_address", spend_address);
+            console.log("receivce_address", receivce_address);
+            console.log("buyAmount", buyAmount);
+            console.log("hash_secret", hash_secret);
+            console.log("hash_lock_arra", hash_lock_array);
+            // // 假设 hashValues 是一个包含了 32 个元素的数组
+            // for (let i = 0; i < 32; i++) {
+            //   hash_lock[`hash_${i + 1}`] = hash_lock_array[i];
+            // }
+            // console.log("hashLock",hash_lock);
+            return atomic_factory_contract.populateTransaction["create"](
+                factory_contract_address_hash,
+                spend_address,
+                receivce_address,
+                token_contract_address,
+                Math.floor(Math.random() * (100000 - 10000 + 1)) + 10000,
+                bigInt(buyAmount) * bigInt(1000000000000000000),
+                ...hash_lock_array
+            );
+        };
+    })
 
-
-
-
-
-
-    const calls_claim = useMemo(() => {
-        if (!address || !strk_contract) return [];
-        return claimContract.populateTransaction["bob_claim"]([0x31, 0x61]);
-    }, [claimContract, address]);
-
-
-
+    // const calls_create = useMemo(() => {
+    //     if (!address || !atomic_factory_contract) return [];
+    //     // console.log('开始调用合约')
+    //     // 移除非空断言操作符 !
+    //     return atomic_factory_contract.populateTransaction["create"](
+    //         factory_contract_address_hash,
+    //         '0x02221B06403918b23F2DD1717D8Ef346fFc85C069efE7FBF680c21A5bDfE5715',
+    //         '0x02221B06403918b23F2DD1717D8Ef346fFc85C069efE7FBF680c21A5bDfE5715',
+    //         token_contract_address,
+    //         10000,
+    //         buyAmount * bigInt(1000000000000000000),
+    //         0xa7,
+    //         0x3f,
+    //         0xcf,
+    //         0x33,
+    //         0x96,
+    //         0x40,
+    //         0x92,
+    //         0x92,
+    //         0x07,
+    //         0x28,
+    //         0x1f,
+    //         0xb8,
+    //         0xe0,
+    //         0x38,
+    //         0x88,
+    //         0x48,
+    //         0x06,
+    //         0xe2,
+    //         0xeb,
+    //         0x08,
+    //         0x40,
+    //         0xf2,
+    //         0x24,
+    //         0x56,
+    //         0x94,
+    //         0xdb,
+    //         0xba,
+    //         0x1d,
+    //         0x5c,
+    //         0xc8,
+    //         0x9e,
+    //         0x65);
+    // }, [atomic_factory_contract, address]);
 
     const {
         writeAsync: writeCreate,
-        Create_data,
-        Create_isPending,
+        // Create_data,
+        // Create_isPending,
     } = useContractWrite({
-        calls: calls_create,
+        calls: callsCreate,
     });
-
-
-    const {
-        writeAsync: claimMoney
-    } = useContractWrite({
-        calls: calls_claim
-    })
-
 
     const { TabPane } = Tabs;
 
@@ -1881,23 +233,163 @@ export default function Listing() {
         setIsModalOpen(true);
     };
     const handleOk = () => {
-
         setIsModalOpen(false);
     };
     const handleCancel = () => {
         setIsModalOpen(false);
     };
+    const swaptBitcoin2Stark = async () => {
+        const origin_secret = getRandomNumber();
+        const secret = Buffer.Buffer.from('123', 'utf-8');
+        const secretHash = bitcoin.crypto.sha256(secret);// 
+        const tx_id = await findRightUtxo(btcAddress, buyAmount * satoshi_unit, gasFee);
+        if (!tx_id) {
+            message.error('utxo not find,tx cancel!')
+            return
+        }
+        const param = {
+            bob_address: selectedCard.bitcoin_address, //接收地址为node端池子的btc地址
+            secretHash: secretHash,//原象hash
+            expire: 1000,
+            value: buyAmount * satoshi_unit + gasFee,
+            tx_id: tx_id,
+            node_btcpublickey: selectedCard.node_btc_publickey
+        }
+        // // localStorage.setItem('origin_secret', origin_secret)
+        // try {
+        const broadcastTxRes = await lockMoneyIntoBTCScript(param);
+        // console.log("broadcastTxRes",broadcastTxRes);
+        // if (broadcastTxRes&&broadcastTxRes.code == 300) {
+        //     message.error("order failed!", broadcastTxRes.error)
+        //     return;
+        // }
+        // const broadcastTxRes = {
+        //     tx_id: 'ae3e2ca9dcb3b777a01ba70165490f514e6b8c6531f6f1ecabba3f6cf1a899d7'
+        // }
+        // console.log('selected', selectedCard);
+        // message.success("tx succeed" + "b784f0cf0adced5d0679ef5d195b941498fc78ef65cd10efe9fd2e685bc7a311")
+        const makeorderParam = {
+            nodeid: selectedCard.nodeid,
+            swaptype: action_swapBtc2Stark,
+            btcAddress: btcAddress,
+            strkAddress: address,
+            amount_in: buyAmount,
+            amount_out: buyAmount * selectedCard.raw_data.price,
+            transaction_hash: broadcastTxRes.tx_id,
+            hashlock: param.secretHash.toString('hex'),
+            node_btcaddress: selectedCard.bitcoin_address,
+            node_strkaddress: selectedCard.starknet_address,
+            node_btc_publickey: selectedCard.node_btc_publickey,
+            user_btc_publickey: window.unisat && await window.unisat.getPublicKey()
+        }
+
+        const result = await synch_makeorder(makeorderParam);
+        if (result) {
+            message.success({
+                content: "order createed! please go to order to check process", result,
+                duration: 5, // 设置消息显示时间为10秒
+            });
+        } else {
+            message.error({
+                content: "order failed",
+                duration: 5, // 设置消息显示时间为10秒
+            });
+        }
+
+        // } catch (error) {
+        //     message.error("order failed!")
+        // }
+
+
+
+        // console.log("result");
+        //判断广播是否成功
+
+        // if (broadcastTxRes.code == 200) {
+        //     const makeorderParam = {
+        //         nodeid: selectedCard.nodeid,
+        //         swaptype: action_swapBtc2Stark,
+        //         btcAddress: btcAddress,
+        //         amount_in: -1,
+        //         amount_out: -1,
+        //         transaction_hash: broadcastTxRes.tx_id,
+        //         hashlock: param.secretHash,
+        //         node_btcaddress: selectedCard.bitcoin_address,
+        //         node_strkaddress: selectedCard.starknet_address,
+        //     }
+        //     await synch_makeorder(makeorderParam);
+        // }
+    }
+    const swapStark2Bitcoin = async () => {
+        const origin_secret = getRandomNumber();
+        const secret = Buffer.Buffer.from("123", 'utf-8');
+        const secretHash = bitcoin.crypto.sha256(secret);// 
+        setTxDetial({
+            secretHash: secretHash.toString('hex'),
+        })
+        const calls_create = createCalls(address, selectedCard.starknet_address, buyAmount, secretHash.toString('hex'));
+        const allowance = await get_strk_Token_allowance(address)
+        console.log("allowance", allowance);
+        // if (allowance < buyAmount) {
+        // await writeAsync()
+        // }
+        // if()
+        setCallsCreate(calls_create)
+    }
+    useEffect(() => {
+        const executeTransaction = async () => {
+            if (callsCreate) {
+                try {
+                    let new_contract = await writeCreate();
+                    // console.log("new_contr",new_contract);
+                    // let new_contract={
+                    //     transaction_hash:'0x6116da15d2511c24934b0c3b1cead51ac0e40d0b5acdc69094dfa1bd1da3250'
+                    // }
+                    let atomic_child_contract_address = await get_transactionhash_result(new_contract['transaction_hash'], address);
+                    if (!atomic_child_contract_address) throw 'did not create new contract '
+                    // 获取到新的合约地址后进行订单生成
+                    const makeorderParam = {
+                        nodeid: selectedCard.nodeid,
+                        swaptype: action_swapStark2BTC,
+                        btcAddress: btcAddress,
+                        strkAddress: address,
+                        amount_in: buyAmount,
+                        amount_out: buyAmount,
+                        transaction_hash: atomic_child_contract_address,
+                        hashlock: transaction_detial.secretHash,
+                        node_btcaddress: selectedCard.bitcoin_address,
+                        node_strkaddress: selectedCard.starknet_address,
+                        node_btc_publickey: selectedCard.node_btc_publickey,
+                        user_btc_publickey: window.unisat && await window.unisat.getPublicKey()
+                    };
+                    const result = await synch_makeorder(makeorderParam);
+                    message.success({
+                        content: `Order created! Please go to order to check process. Address: ${atomic_child_contract_address}`,
+                        duration: 5, // 设置消息显示时间为10秒
+                    });
+                } catch (error) {
+                    console.error('Transaction failed:', error);
+                    message.error("Transaction failed!");
+                }
+            }
+        };
+
+        executeTransaction();
+    }, [callsCreate]);
 
     const HandleSwap = async () => {
-        setIsLoading(true); // 设置加载状态为 true
-        const param = {
-            alice_address: btcAddress,
-            bob_address: 'mwfFsVm3qpdcHnfanJ29EafpEDTCwnd9Bf'
+        setIsLoading(true);
+        if (swapType == swapBtc2Stark) {
+            swaptBitcoin2Stark();
+        } else {
+            swapStark2Bitcoin()
         }
-        //加锁以后生成订单通知服务器工厂合约生产合约
-        console.log('param',param);
-        const tx_id = lockMoneyIntoBTCScript(param);
-        console.log(tx_id);
+        setIsLoading(false)
+        handleOk()
+        // if(current==1){
+        //     swapStark2Bitcoin()
+        // }
+
         // const makeorderParam = {
         //     nodeid: selectedCard.nodeid,
         //     swaptype: "btc2strk",
@@ -1909,7 +401,7 @@ export default function Listing() {
         //     node_btcaddress: param.btcAddress,
         //     node_strkaddress: param.strkaddress,
         // }
-        // await synch_makeorder(tx_id);
+
         // try {
         //     //获取当前地址余额
         //     if (address == '') {
@@ -1922,15 +414,15 @@ export default function Listing() {
         //         if (approved_amount >= buyAmount) {
 
         //             // console.log('额度足，无需授权');
-        // await writeAsync()
+
         // let new_contract = await writeCreate();
 
         // console.log('new_contract', new_contract);
 
         // let atomic_child_contract_address = await get_transactionhash_result(new_contract['transaction_hash']);
-        let atomic_child_contract_address = await get_transactionhash_result('0x22fdf943a12643709fc931a4be4d96524d6c483944590f5942af63376002542')
-    
-        setSwapContractAddress(atomic_child_contract_address)
+        // let atomic_child_contract_address = await get_transactionhash_result('0x22fdf943a12643709fc931a4be4d96524d6c483944590f5942af63376002542')
+
+        // setSwapContractAddress(atomic_child_contract_address)
 
         //         } else {
         //             // let ruslt = await writeAsync();
@@ -1971,163 +463,17 @@ export default function Listing() {
         // }
 
     };
-
-    async function get_transactionhash_result(transaction_hash) {
-        console.log(transaction_hash);
-        const provider = new RpcProvider({
-            nodeUrl: "https://free-rpc.nethermind.io/sepolia-juno/"
-        })
-        let result = await provider.waitForTransaction(transaction_hash);
-        let atomic_child_contract = result.events.find(event => event.from_address === address)?.data[2];
-        console.log(result.events.find(event => event.from_address === strkAddress)?.data[2]);
-        return atomic_child_contract
-    }
-
-    async function get_strk_Token_abi() {
-        //initialize Provider
-        const provider = new RpcProvider({
-            nodeUrl: "https://free-rpc.nethermind.io/sepolia-juno/"
-        })
-        // Connect the deployed Test contract in Testnet
-        const testAddress = '0x04718f5a0Fc34cC1AF16A1cdee98fFB20C31f5cD61D6Ab07201858f4287c938D';
-
-
-        // read abi of Test contract
-        const { abi: testAbi } = await provider.getClassAt(testAddress);
-        // console.log('abi',testAbi);
-        if (testAbi === undefined) {
-            throw new Error('no abi.');
-
-
-        }
-
-        console.log(testAbi);
-        return testAbi
-
-    }
-
-    async function get_atomic_factory_abi() {
-        //initialize Provider
-        const provider = new RpcProvider({
-            nodeUrl: "https://free-rpc.nethermind.io/sepolia-juno/"
-        })
-        // Connect the deployed Test contract in Testnet
-        const testAddress = '0x02177a3a2ce3daaf21f65c8df1b031f6d69d292b92354ce842180e098349911f';
-
-
-        // read abi of Test contract
-        const { abi: testAbi } = await provider.getClassAt(testAddress);
-        // console.log('abi',testAbi);
-        if (testAbi === undefined) {
-            throw new Error('no abi.');
-
-
-        }
-
-        console.log(testAbi);
-        return testAbi
-
-    }
-
-
-    // async function synch_makeorder(tx_id) {
-    //     // const data = {
-    //     //         node_id: selectedCard.nodeid,
-    //     //         swaptype: "strk2btc",
-    //     //         timestamp: "2024-04-17T11:30:00.000Z",
-    //     //         user_btcaddress: btcAddress,
-    //     //         user_strkaddress: strkAddress,
-    //     //         amount_in: 1000,
-    //     //         amount_out: 0.002,
-    //     //         transaction_hash: "transaction_hash_value",
-    //     //         hashlock: "hashlock_value",
-    //     //         node_btcaddress: selectedCard.node_btcaddress,
-    //     //         node_strkaddress: selectedCard.node_strkaddress
-    //     // };
-
-    //     const data = {
-    //         node_id: selectedCard.nodeid,
-    //         swaptype: "btc2strk",
-    //         timestamp: new Date(),
-    //         user_btcaddress: btcAddress,
-    //         user_strkaddress: "address_1",
-    //         amount_in: 0.005,
-    //         amount_out: 1000,
-    //         transaction_hash: "3ef5b8f3eaa67d585f8aab0cb5f880db5743e97887923cc082dfa5f3e20702cd",
-    //         hashlock: "hashlock_value",
-    //         node_btcaddress: "test",
-    //         node_strkaddress: "test"
-    //     }
-
-    //     console.log('开始发送请求');
-    //     try {
-    //         const response = await fetch(baseUrl+'api/v1/makeorder', {
-    //             method: 'POST',
-    //             headers: {
-    //                 'Content-Type': 'application/json',
-    //             },
-    //             body: JSON.stringify(data),
-    //         });
-
-    //         if (!response.ok) {
-    //             throw new Error('Network response was not ok');
-    //         }
-
-    //         console.log('Response:', response);
-    //         const responseData = await response.json();
-    //         console.log('Response:', responseData);
-    //     } catch (error) {
-    //         console.error('Error:', error);
-    //     }
-    // }
-
-
-
-    async function get_strk_Token_allowance() {
-
-        const provider = new RpcProvider({
-            nodeUrl: "https://free-rpc.nethermind.io/sepolia-juno/"
-        })
-
-        const testAddress = '0x04718f5a0Fc34cC1AF16A1cdee98fFB20C31f5cD61D6Ab07201858f4287c938D';
-        const { abi: testAbi } = await provider.getClassAt(testAddress);
-
-
-        if (testAbi === undefined) {
-            throw new Error('no abi.');
-        }
-        const myTestContract = new Contract(testAbi, testAddress, provider);
-
-        // Interaction with the contract with cmeall
-        let allowance = await myTestContract.allowance(address, '0x02177a3a2ce3daaf21f65c8df1b031f6d69d292b92354ce842180e098349911f');
-
-        console.log('allowance =', { allowance });
-
-        try {
-            if (allowance !== '0x0') {
-                // const decimalAllowance = parseInt(allowance, 16);
-                const bigIntAllowance = BigInt(allowance);
-                const dividedNumber = Number(bigIntAllowance) / BigInt(10 ** 18);
-                console.log(dividedNumber);
-                return dividedNumber;
-            } else {
-                console.log('Allowance is 0');
-                return 0;
-            }
-        } catch {
-            return 0;
-        }
-
+    //tab 切换 交易模式，1：BTC->STARK 2：STARK -> BTC
+    const onChange = (key) => {
+        setSwapType(key)
     }
 
 
     useEffect(() => {
-
-
         const fetchData = async () => {
             try {
                 // 45.32.100.53
-                const response = await fetch('http://127.0.0.1:4000/api/v1/pool');
+                const response = await fetch(baseUrl + 'api/v1/pool');
                 const data = await response.json();
                 const formattedList = data.pool.map((item) => ({
                     title: 'BTC',
@@ -2143,33 +489,36 @@ export default function Listing() {
                     balanceof_btc: item.balanceof_btc,
                     starknet_address: item.starknet_address,
                     nodeid: item.nodeid,
-                    blanceof_strk: item.blanceof_strk
-
-
+                    blanceof_strk: item.blanceof_strk,
+                    node_btc_publickey: item.node_btc_publickey,
+                    raw_data: item
                 }));
                 setList(formattedList);
-                console.log(data.pool);
             } catch (error) {
                 console.error('Error fetching pool data:', error);
             }
         };
 
         fetchData();
-
+        getBTCPrice().then(res=>{
+            setBtcPrice(res);
+        })
+    
     }, []);
     return (
         <div className='listing'>
             <div className='ltop ss'>
                 <div className='l'>
 
-                    <Tabs defaultActiveKey="1">
-                        <TabPane tab={<Button type="link">Stark</Button>} key="1">
+                    <Tabs defaultActiveKey={swapBtc2Stark} onChange={onChange} >
+                        <TabPane tab={<Button type="link">BTC2Strk</Button>} key={swapBtc2Stark}>
                             <div className="tab-pane-container">
                                 <div className='lbot'>
                                     {list.map((e, i) => {
                                         return (
                                             <div key={i} className={current === i ? 'lbox cur' : 'lbox'} onClick={() => {
                                                 setCurrent(i);
+                                    
                                                 setSelectedCard(e);
                                             }}>
                                                 <div style={{ marginBottom: '15px' }}>
@@ -2220,13 +569,14 @@ export default function Listing() {
 
                         </TabPane>
 
-                        <TabPane tab={<Button type="link">Bitcoin</Button>} key="2">
+                        <TabPane tab={<Button type="link">Strk2BTC</Button>} key={swapStark2Btc}>
                             <div className="tab-pane-container">
                                 <div className='lbot'>
                                     {list.map((e, i) => {
                                         return (
                                             <div key={i} className={current === i ? 'lbox cur' : 'lbox'} onClick={() => {
                                                 setCurrent(i);
+
                                                 setSelectedCard(e);
                                             }}>
                                                 <div style={{ marginBottom: '15px' }}>
@@ -2285,46 +635,70 @@ export default function Listing() {
                 </div>
             </div>
 
-            <Modal footer={null} centered title="Swap BTC to Strk" open={isModalOpen} onOk={handleOk} onCancel={handleCancel}>
-                <div className='Mod'>
-                    <div className="modelBox">
-                        <span>Token Address</span>
-                        <span className="asA">{selectedCard.title}</span>
+            {
+                selectedCard.raw_data ? (<Modal footer={null} centered title={swapType == 1 ? 'Swap BTC to Strk' : 'Swap Strk to BTC'} open={isModalOpen} onOk={handleOk} onCancel={handleCancel}>
+                    <div className='Mod'>
+                        <div className="modelBox">
+                            <span>Server</span>
+                            <span className="asA">{selectedCard.server}</span>
+                        </div>
+                        <div className="modelBox">
+                            <span>Price</span>
+                            <span className="asA" style={{ color: "#00D889" }}>
+                                {selectedCard.price}
+                            </span>
+                        </div>
+                        <div className='modelBox'>
+                            <span style={{ display: 'flex', alignItems: 'center' }}>Input Amount  <img src={swapType == 1 ? btcimg : strkimg} alt="Description of the image" style={{ marginLeft: '5px', height: '20px' }} /></span>
+                            <span className='asA'> <Input value={buyAmount} onChange={handleInputChange} /> <a onClick={handleMax} style={{ color: "#00D889" }}  > max </a></span>
+                        </div>
+                        <div className='modelBox'>
+                            <span style={{ display: 'flex', alignItems: 'center' }}>Spend Amount  <img src={swapType == 1 ? btcimg : strkimg} alt="Description of the image" style={{ marginLeft: '5px', height: '20px' }} /></span>
+                            <span className='asA'> {swapType == 1 ? (Number(buyAmount) + ((2 * gasFee) / satoshi_unit)).toFixed(8) : buyAmount}</span>
+
+                        </div>
+                        {
+                            swapType == 1 ? <div className='modelBox'>
+                                <span style={{ display: 'flex', alignItems: 'center' }}>Gas Fee  <img src={swapType == 1 ? btcimg : strkimg} alt="Description of the image" style={{ marginLeft: '5px', height: '20px' }} /></span>
+                                <span className='asA'>{2 * gasFee / satoshi_unit} </span>
+                                {/* <span>{swapType == 1 ? '(gas fee+spend amount + service fee)' : ''}</span> */}
+                            </div> : <></>
+                        }
+
+                        <div className='modelBox'>
+                            <span style={{ display: 'flex', alignItems: 'center' }}>Receive Amount  <img src={swapType == 1 ? strkimg : btcimg} alt="Description of the image" style={{ marginLeft: '5px', height: '20px' }} /></span>
+
+                            <span className='asA' style={{ color: "#00D889" }}>   {swapType == 1 ? buyAmount * selectedCard.raw_data.price : buyAmount / selectedCard.raw_data.price}</span>
+                        </div>
+                        <div className='modelBox'>
+                            <span>Receive Amount </span>
+                            <span className='asA' style={{ color: "#00D889" }}>   {'≈$ ' + btcPrice*buyAmount}</span>
+                        </div>
+                        <div className='modelBox'>
+                            <span>Total Value</span>
+                            <span className='asA' style={{ color: "#00D889" }}>   {selectedCard.Value}</span>
+                        </div>
+                        <div className='modelBox'>
+                            <span>Service Fee</span>
+                            <span className='asA'> {selectedCard.raw_data.fee * buyAmount} {swapType == 1 ? "btc" : 'strk'}</span>
+                        </div>
+                        <div className='modelBox'>
+                            <span className='btnsAA asA' style={{ fontSize: '15px', color: "#00D889" }}>warnlng: please cllam your token on 48 hours,If you  no’t you will perhaps lost your token </span>
+                        </div>
+                        <div className='modelBox sa'>
+                            {contextHolder}
+                            <Button
+                                className='bts'
+                                ghost
+                                onClick={HandleSwap}
+                                disabled={isLoading}
+                            >
+                                {isLoading ? <Spin /> : 'Swap'}
+                            </Button>
+                        </div>
                     </div>
-                    <div className="modelBox">
-                        <span>Price</span>
-                        <span className="asA" style={{ color: "#00D889" }}>
-                            {selectedCard.price}
-                        </span>
-                    </div>
-                    <div className='modelBox'>
-                        <span>Buy Amount</span>
-                        <span className='asA'> <Input value={buyAmount} onChange={handleInputChange} /> <a onClick={handleMax} style={{ color: "#00D889" }}  > max </a></span>
-                    </div>
-                    <div className='modelBox'>
-                        <span>Total Value</span>
-                        <span className='asA' style={{ color: "#00D889" }}>   {selectedCard.Value}</span>
-                    </div>
-                    <div className='modelBox'>
-                        <span>Service Fee</span>
-                        <span className='asA'> {selectedCard.fee} strk</span>
-                    </div>
-                    <div className='modelBox'>
-                        <span className='btnsAA asA' style={{ fontSize: '15px', color: "#00D889" }}>warnlng: please cllam your token on 48 hours,If you  no’t you will perhaps lost your token </span>
-                    </div>
-                    <div className='modelBox sa'>
-                        {contextHolder}
-                        <Button
-                            className='bts'
-                            ghost
-                            onClick={HandleSwap}
-                            disabled={isLoading}
-                        >
-                            {isLoading ? <Spin /> : 'Swap'}
-                        </Button>
-                    </div>
-                </div>
-            </Modal>
+                </Modal>) : <></>
+            }
 
 
 

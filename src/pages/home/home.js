@@ -1,4 +1,4 @@
-import React,{ useState, useEffect }  from 'react'
+import React, { useState, useEffect, useContext } from 'react'
 import './home.css'
 import { Tabs } from 'antd/es';
 import Listing from '../tab/listing';
@@ -8,11 +8,16 @@ import '../tab/All.css'
 import imgs from '../../assets/bt.svg'
 import imgs1 from '../../assets/node.svg'
 import imgs2 from '../../assets/tvl.svg'
+import { WalletContext } from '../../WalletContext';
+import { get_order_list } from '../../Utils/AtomicService';
 export default function Home() {
 
-
   const [overviewData, setOverviewData] = useState(null);
-  
+  const {
+    btcAddress,
+    userOrderList,
+    setUserOrderList
+  } = useContext(WalletContext);
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -24,7 +29,7 @@ export default function Home() {
         console.error('Error fetching overview data:', error);
       }
     };
-  
+
     fetchData();
   }, []);
 
@@ -36,9 +41,13 @@ export default function Home() {
   ];
 
 
-  
-  const onChange = (key) => {
-    console.log(key);
+
+  const onChange = async (key) => {
+    if (key == 3) {
+      //点击更新订单列表
+      const data = await get_order_list(btcAddress);
+      setUserOrderList(data)
+    }
   };
   const items = [
     {
