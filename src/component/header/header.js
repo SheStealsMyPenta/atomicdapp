@@ -9,6 +9,8 @@ import strkimg from '../../assets/strk.png'
 import btcimg from '../../assets/btc.png'
 import { useAccount, useConnect, useDisconnect } from "@starknet-react/core";
 import { WalletContext } from '../../WalletContext';
+import { value } from '../../bitcoinjs-lib'
+import { message } from 'antd'
 
 
 const getWidth = () => {
@@ -54,18 +56,11 @@ export default function Header() {
 
 
 
-
-
-
-
-
-
   const handleMenuClick = (e) => {
 
     //关闭钱包
     if (e.key === '1') {
       if (strkAddress) {
-
         CloseConnectStarknet();
         setStrkAddress('');
       } else if (btcAddress) {
@@ -75,6 +70,35 @@ export default function Header() {
     }
 
   };
+  const handleMobileMenuClick = (e) => {
+    message.info('please open on PC')
+    return;
+    const key = Number(e.key)
+    switch (key) {
+      case 1:
+        //连接BTC
+        handleBitcoinClick()
+        break;
+      case 2:
+        //断开连接BTC
+        setBtcAddress(''); // 重置 btcAddress 为空字符串
+        break;
+      case 3:
+        //设置私钥
+        setModalVisible(true)
+        break;
+      case 4:
+        //连接stark
+        handleStarknetClick()
+        break;
+      case 5:
+        disconnect()
+        // disconnectStarknetkit({ clearLastWallet: true });
+        setStrkAddress('');
+        break;
+    }
+    // console.log(e.key);
+  }
   const [windowWidth, setWindowWidth] = useState(getWidth());
   const [flag, setFlag] = useState(false);
   const [modalVisible, setModalVisible] = useState(false)
@@ -82,10 +106,13 @@ export default function Header() {
   useEffect(() => {
 
     setStrkAddress(address);
+    handleBitcoinClick()
+    handleStarknetClick()
     const widthSize = () => {
       setWindowWidth(getWidth());
     };
     window.addEventListener("resize", widthSize);
+
     return () => {
       window.removeEventListener("resize", widthSize);
     };
@@ -112,7 +139,7 @@ export default function Header() {
       setStrkAddress('');
       setStrkAddressIsDropdownOpen(false);
       // CloseConnectStarknet();
-      
+
       setStrkAddress(''); // 重置 strkAddress 为空字符串
       setStrkAddressIsDropdownOpen(false);
     },
@@ -125,7 +152,7 @@ export default function Header() {
         key: '1',
       },
       {
-        label: 'Set Private Key',
+        label: 'Set Private Key(WIF)',
         key: '2'
 
       }
@@ -144,7 +171,12 @@ export default function Header() {
 
     },
   }
-
+  const btcConnectItem = {
+    items: [{
+      label: 'connect btc',
+      key: '1',
+    }],
+  }
 
   const items = [
     {
@@ -154,14 +186,8 @@ export default function Header() {
     },
   ];
   const itemsa = [
-    getItem('Points', '1'),
-    getItem('Starknet', '2'),
-    getItem('Docs', '3'),
-    getItem('Connect Wallet', 'sub1', <AppstoreOutlined />, strkAddress ? strkDisconnectItems : []),
-    getItem('Connect OKX', 'sub2', <AppstoreOutlined />, btcAddress ? btcDisconnectItems : []),
-    getItem('Relays', 'sub3', <AppstoreOutlined />, [
-      getItem('1', '11'),
-    ]),
+    getItem('Connect Wallet', 'sub1', <img src={strkimg} alt="Description of the image" style={{ height: '20px' }} />, address ? [{ label: "Disconnect", key: 5 }] : [{ label: "Connect", key: 4 }]),
+    getItem('Connect OKX', 'sub2', <img src={btcimg} alt="Description of the image" style={{ height: '20px' }} />, btcAddress ? [{ label: "Disconnect", key: 2 }, { label: "Set Private Key(WIF)", key: 3 }] : [{ label: "Connect", key: 1 }]),
   ];
 
   const menuProps = {
@@ -182,7 +208,6 @@ export default function Header() {
       setBtcAddressIsDropdownOpen(open);
     }
   };
-  console.log("addressese", address);
   return (
     <div className='box'>
       {windowWidth.width < 670 ? <>
@@ -195,6 +220,7 @@ export default function Header() {
             defaultSelectedKeys={['1']}
             defaultOpenKeys={['sub1']}
             mode="inline"
+            onClick={handleMobileMenuClick}
             theme="dark"
             items={itemsa}
           /></div>
@@ -220,7 +246,7 @@ export default function Header() {
           </ul>
         </div>
         <div className='right'>
-          <>
+          
             <Dropdown
 
               menu={strkDisconnectItems}
@@ -228,10 +254,9 @@ export default function Header() {
               open={isStrkAddressDropdownOpen}
               onOpenChange={handleStrkDropdownOpenChange}
             >
-
               <div className="text-xs bg-gray-700 px-2 py-1 rounded-full mx-1 flex items-center" style={{ position: 'relative' }}>
                 <img src={strkimg} alt="Description of the image" style={{ height: '20px' }} />
-                <div style={{display:'none'}} >
+                <div style={{ display: 'none' }} >
                   <span>Choose a wallet: </span>
                   {connectors.map((connector) => {
                     return (
@@ -242,7 +267,7 @@ export default function Header() {
                         className="gap-x-2 mr-2"
                       >
                         {connector.id}
-                      </Button> 
+                      </Button>
                     );
                   })}
                 </div>
@@ -254,45 +279,14 @@ export default function Header() {
                   }}
                 >
                   {address ? address.substring(0, 8) + '...' + address.substring(address.length - 8, address.length) : 'Connect Wallet'}
+                  <span className="border-green-400 border-2 absolute inset-0 rounded-full hover:animate-spin-hover"></span>
                 </button>{isStrkAddressDropdownOpen ? <DownOutlined /> : <UpOutlined />}
                 {/* <span>{address}</span> */}
               </div>
             </Dropdown>
-            <Dropdown
-              menu={btcDisconnectItems}
-              trigger={['click']}
-              open={isBtcAddressDropdownOpen}
-              onOpenChange={handleBtcDropdownOpenChange}
-            >
-              {/* <Button type="primary" style={{ background: '#00D889', color: '#fff' }}  onClick={() => handleBitcoinClick()} >
-              <Space>
-                {btcAddress ? btcAddress.substring(0, 8) + '...' + btcAddress.substring(btcAddress.length - 8, btcAddress.length) : 'Connect OKX'}
-              </Space>
-            </Button> */}
-              <div className="text-xs bg-gray-700 px-2 py-1 rounded-full mx-1 flex items-center" style={{ position: 'relative' }}>
-                <img src={btcimg} alt="Description of the image" style={{ height: '20px' }} />
-                <button
-                  className="text-xs bg-gray-700 px-2 py-1 rounded-full mx-1 flex items-center"
-                  style={{ position: 'relative', overflow: 'hidden' }}
-                  onClick={() => handleBitcoinClick()}
-                >
-                  {btcAddress ? btcAddress.substring(0, 8) + '...' + btcAddress.substring(btcAddress.length - 8, btcAddress.length) : 'Connect OKX'}  <i className="fas fa-chevron-down ml-2"></i>
-                  <span className="border-green-400 border-2 absolute inset-0 rounded-full hover:animate-spin-hover"></span>
-                </button>
-              </div>
-            </Dropdown>
-            {/* <Dropdown menu={menuProps}>
-              <Button style={{ border: '1px solid #00D889', color: '#fff' }} ghost>
-                <Space>
-                  Relays
-                  <DownOutlined style={{ fontSize: '10px' }} />
-                </Space>
-              </Button>
-            </Dropdown> */}
-          </>
+        
         </div>
       </>}
-      <PrivateKeyModal visible={modalVisible} onCancel={() => { setModalVisible(false) }} setPrivateKey={setContextBtcPrivateKey} />
     </div>
   )
 }
@@ -301,7 +295,7 @@ const PrivateKeyModal = (props) => {
   const handleOk = () => {
     // 在这里处理用户点击确认按钮后的逻辑
     console.log('Private Key:', privateKey);
-    localStorage.setItem("btc_privatekey",privateKey)
+    localStorage.setItem("btc_privatekey", privateKey)
   };
   const inputPrivateKeyModal = (
     <Modal
@@ -311,7 +305,7 @@ const PrivateKeyModal = (props) => {
       onCancel={props.onCancel}
       footer={
         <Button ghost key="submit" className='bts' onClick={() => {
-             localStorage.setItem("btc_privatekey",privateKey)
+          localStorage.setItem("btc_privatekey", privateKey)
           props.setPrivateKey(privateKey)
           props.onCancel()
         }}>

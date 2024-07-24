@@ -1,4 +1,4 @@
-import { CopyOutlined } from '@ant-design/icons';
+import { CopyOutlined, SwapLeftOutlined, SwapRightOutlined } from '@ant-design/icons';
 import { Input } from 'antd';
 import { Modal } from 'antd';
 import { Button, Pagination, Spin } from 'antd/es';
@@ -13,8 +13,8 @@ import { useAccount, useBalance, useContractRead, useContractWrite, useNetwork }
 import { Button as notificationButton, notification, Space } from 'antd';
 import useAllowanceRead from './starknet-contract-provider';
 import bigInt from 'big-integer';
-import { findRightUtxo, getBTCPrice, getUTXOList, get_strk_Token_allowance, get_transactionhash_result, lockMoneyIntoBTCScript, synch_makeorder } from '../../Utils/AtomicService';
-import { action_swapBtc2Stark, action_swapStark2BTC, baseUrl, factory_contract_address, factory_contract_address_hash, gasFee, satoshi_unit, swapBtc2Stark, swapStark2Btc, token_contract_address } from '../../static/Const';
+import { findRightUtxo, findRightUtxos, getBTCPrice, getBtcAcc, getBtcGasFee, get_strk_Token_allowance, get_transactionhash_result, lockMoneyIntoBTCScript, synch_makeorder, } from '../../Utils/AtomicService';
+import { action_swapBtc2Stark, action_swapStark2BTC, baseUrl, factory_contract_address, factory_contract_address_hash, btcGasFee, satoshi_unit, swapBtc2Stark, swapStark2Btc, token_contract_address, gasFee, data_mount, expire_block, expire_time } from '../../static/Const';
 import * as bitcoin from '../../bitcoinjs-lib';
 import btcimg from '../../assets/btc.png'
 import strkimg from '../../assets/strk.png'
@@ -33,6 +33,10 @@ export default function Listing() {
     const [buyAmount, setBuyAmount] = useState('0');
     const [swapType, setSwapType] = useState(1) //1 btc->stark
     const [btcPrice, setBtcPrice] = useState(0)
+    const [origin_secret, setSecretKey] = useState('')
+    const [modalVisible, setModalVisible] = useState(false)
+
+    // const [btcGasFee, setBtcGasFee] = useState(gasFee)
     const [transaction_detial, setTxDetial] = useState({
         secretHash: '',
         recepient: '',
@@ -54,31 +58,37 @@ export default function Listing() {
     const {
         btcAddress,
         strkAddress,
+        btcPublicKey,
         setStrkAddress,
         setBtcAddress,
+        btcGasFee,
+        setBtcGasFee,
         setStrkAddressIsDropdownOpen,
         setBtcAddressIsDropdownOpen,
-
         isStrkAddressDropdownOpen,
-        isBtcAddressDropdownOpen,
         setSwapContractAddress,
         handleStarknetClick,
         CloseConnectStarknet,
         handleBitcoinClick
     } = useContext(WalletContext);
     const [api, contextHolder] = notification.useNotification();
-    const openNotificationWithIcon = (type) => {
-        api[type]({
-            message: 'Notification Title',
+    const openNotificationWithIcon = (type, title = 'test', duration = 30, closable = true) => {
+        const notificationKey = `open${Date.now()}`; // 生成唯一的 key
+        const notificationObj = api[type]({
+            message: title,
             description:
-                'This is the content of the notification. This is the content of the notification. This is the content of the notification.',
+                'please wait tx succeed!',
             placement: 'bottomLeft', // 设置通知位置为屏幕左下角
-            duration: 1.5, // 设置通知持续时间为 3 秒
+            duration: duration, // 设置通知持续时间为 3 秒
+            key: notificationKey, // 设置唯一 key
             style: {
                 // backgroundColor: '#262626', // 设置通知背景颜色为黑色
                 // color: '#fff', // 设置通知文本颜色为白色
             },
+            closable: closable, // 设置为 false，用户无法手动关闭通知
         });
+        return notificationKey
+
     };
 
     const testAddress = token_contract_address
@@ -97,7 +107,7 @@ export default function Listing() {
 
     const { data, isError, balance_isLoading, error } = useContractRead({
         functionName: "balance_of",
-        args: [strkAddress],
+        args: [address],
         abi,
         address: token_contract_address,
         watch: true,
@@ -131,11 +141,11 @@ export default function Listing() {
         return (spend_address, receivce_address, buyAmount, hash_secret) => {
             if (!address || !atomic_factory_contract) return [];
             const hash_lock_array = hashToByteArray(hash_secret)
-            console.log("spend_address", spend_address);
-            console.log("receivce_address", receivce_address);
-            console.log("buyAmount", buyAmount);
-            console.log("hash_secret", hash_secret);
-            console.log("hash_lock_arra", hash_lock_array);
+            // console.log("spend_address", spend_address);
+            // console.log("receivce_address", receivce_address);
+            // console.log("buyAmount", buyAmount);
+            // console.log("hash_secret", hash_secret);
+            // console.log("hash_lock_arra", hash_lock_array);
             // // 假设 hashValues 是一个包含了 32 个元素的数组
             // for (let i = 0; i < 32; i++) {
             //   hash_lock[`hash_${i + 1}`] = hash_lock_array[i];
@@ -210,12 +220,49 @@ export default function Listing() {
 
     const handleInputChange = (e) => {
         // 更新buyAmount状态
-        setBuyAmount(e.target.value);
+        if (swapType == swapBtc2Stark) {
+            // // const buyAmount = parseFloat(e.target.value);
+            // const remaining = parseFloat(selectedCard.raw_data.blanceof_strk);
+            // // console.log('remain', remaining);
+            // const maxValue = remaining / parseFloat(selectedCard.raw_data.price);
+            // // console.log('remain', remaining, maxValue);
+            // // const minAmount = Math.min(buyAmount, maxValue);
+            // const inputValue = parseFloat(e.target.value);
+
+            // // 确保输入值为有效数字，并且不超过最大值
+            // if (!isNaN(inputValue)) {
+            //     const newValue = Math.min(inputValue, maxValue);
+            //     setBuyAmount(newValue.toString());
+            // } else {
+            //     setBuyAmount('');
+            // }
+            setBuyAmount(e.target.value);
+        } else {
+            // const buyAmount = e.target.value
+            // const remaining = selectedCard.raw_data.blanceof_btc
+            // const maxValue = Math.floor(remaining * selectedCard.raw_data.price)
+            // const user_remain = BigInt(data) / BigInt(1000000000000000000)
+            // const minAmount = Math.min(buyAmount, maxValue, user_remain);
+            // setBuyAmount(minAmount);
+            setBuyAmount(e.target.value);
+        }
     };
 
     const handleMax = (e) => {
+
         // 更新buyAmount状态
-        setBuyAmount((BigInt(data) / BigInt(1000000000000000000)));
+        if (swapType == swapBtc2Stark) {
+            const remaining = selectedCard.raw_data.blanceof_strk
+            const maxValue = remaining / selectedCard.raw_data.price
+            setBuyAmount(maxValue)
+        } else {
+            const remaining = selectedCard.raw_data.blanceof_btc
+            const maxValue = Math.floor(remaining * selectedCard.raw_data.price)
+            const user_remain = Math.floor(BigInt(data) / BigInt(1000000000000000000))
+            const minAmount = Math.min(maxValue, user_remain);
+            setBuyAmount(minAmount);
+        }
+
 
     };
 
@@ -230,6 +277,20 @@ export default function Listing() {
             handleStarknetClick();
             return
         }
+        //增加判断是否设置privateKey 以及是否Private的Ac 跟unisat钱包一直
+        const btc_privatekey = localStorage.getItem('btc_privatekey')
+        if (!btc_privatekey) {
+            message.error("please set private key first!")
+            setModalVisible(true)
+            return;
+        }
+        // alert(btcPublicKey)
+        const publicKey = getBtcAcc(btc_privatekey)
+        if (publicKey != btcPublicKey) {
+            message.error("current wallet's public key is different with private key, please reset")
+            setModalVisible(true)
+            return;
+        }
         setIsModalOpen(true);
     };
     const handleOk = () => {
@@ -239,33 +300,50 @@ export default function Listing() {
         setIsModalOpen(false);
     };
     const swaptBitcoin2Stark = async () => {
+
         const origin_secret = getRandomNumber();
-        const secret = Buffer.Buffer.from('123', 'utf-8');
+
+        setSecretKey(origin_secret)
+        const secret = Buffer.Buffer.from(origin_secret.toString(), 'utf-8');
         const secretHash = bitcoin.crypto.sha256(secret);// 
-        const tx_id = await findRightUtxo(btcAddress, buyAmount * satoshi_unit, gasFee);
-        if (!tx_id) {
+        //找utxo
+        const tx_ids = await findRightUtxos(btcAddress, buyAmount * satoshi_unit, btcGasFee);
+        console.log(tx_ids, 'tx_ids');
+        if (!tx_ids) {
             message.error('utxo not find,tx cancel!')
             return
         }
+        const notification_key = openNotificationWithIcon('warning', 'please wait tx to process', 30, false);
+        // const tx_id = '213'
+        const fee = (selectedCard.raw_data.fee * buyAmount * satoshi_unit)
+        // console.log('fee',fee);
+        // return 
         const param = {
             bob_address: selectedCard.bitcoin_address, //接收地址为node端池子的btc地址
             secretHash: secretHash,//原象hash
-            expire: 1000,
-            value: buyAmount * satoshi_unit + gasFee,
-            tx_id: tx_id,
-            node_btcpublickey: selectedCard.node_btc_publickey
+            expire: expire_block,
+            value: Math.floor(buyAmount * satoshi_unit + btcGasFee + fee), //
+            tx_ids: tx_ids,
+            node_btcpublickey: selectedCard.node_btc_publickey,
+            btcGasFee:btcGasFee
         }
         // // localStorage.setItem('origin_secret', origin_secret)
         // try {
         const broadcastTxRes = await lockMoneyIntoBTCScript(param);
+
         // console.log("broadcastTxRes",broadcastTxRes);
-        // if (broadcastTxRes&&broadcastTxRes.code == 300) {
-        //     message.error("order failed!", broadcastTxRes.error)
-        //     return;
-        // }
         // const broadcastTxRes = {
         //     tx_id: 'ae3e2ca9dcb3b777a01ba70165490f514e6b8c6531f6f1ecabba3f6cf1a899d7'
         // }
+        if (broadcastTxRes && broadcastTxRes.code == 300) {
+            api.destroy(notification_key)
+            message.error({
+                content: "order failed" + broadcastTxRes.error,
+                duration: 5, // 设置消息显示时间为10秒
+            });
+            return;
+        }
+
         // console.log('selected', selectedCard);
         // message.success("tx succeed" + "b784f0cf0adced5d0679ef5d195b941498fc78ef65cd10efe9fd2e685bc7a311")
         const makeorderParam = {
@@ -280,16 +358,19 @@ export default function Listing() {
             node_btcaddress: selectedCard.bitcoin_address,
             node_strkaddress: selectedCard.starknet_address,
             node_btc_publickey: selectedCard.node_btc_publickey,
-            user_btc_publickey: window.unisat && await window.unisat.getPublicKey()
+            user_btc_publickey: btcPublicKey
         }
-
+        localStorage.setItem(broadcastTxRes.tx_id, origin_secret)
         const result = await synch_makeorder(makeorderParam);
         if (result) {
+            api.destroy(notification_key)
+            openNotificationWithIcon('success', 'transaction succeed!', 3);
             message.success({
-                content: "order createed! please go to order to check process", result,
+                content: "order created! please go to order to check process", result,
                 duration: 5, // 设置消息显示时间为10秒
             });
         } else {
+            api.destroy(notification_key)
             message.error({
                 content: "order failed",
                 duration: 5, // 设置消息显示时间为10秒
@@ -322,7 +403,8 @@ export default function Listing() {
     }
     const swapStark2Bitcoin = async () => {
         const origin_secret = getRandomNumber();
-        const secret = Buffer.Buffer.from("123", 'utf-8');
+        setSecretKey(origin_secret)
+        const secret = Buffer.Buffer.from(origin_secret.toString(), 'utf-8');
         const secretHash = bitcoin.crypto.sha256(secret);// 
         setTxDetial({
             secretHash: secretHash.toString('hex'),
@@ -330,23 +412,29 @@ export default function Listing() {
         const calls_create = createCalls(address, selectedCard.starknet_address, buyAmount, secretHash.toString('hex'));
         const allowance = await get_strk_Token_allowance(address)
         console.log("allowance", allowance);
-        // if (allowance < buyAmount) {
-        // await writeAsync()
-        // }
+        if (allowance < buyAmount) {
+            await writeAsync()
+        }
         // if()
         setCallsCreate(calls_create)
     }
     useEffect(() => {
         const executeTransaction = async () => {
             if (callsCreate) {
+                let notification_key = ''
                 try {
                     let new_contract = await writeCreate();
                     // console.log("new_contr",new_contract);
                     // let new_contract={
                     //     transaction_hash:'0x6116da15d2511c24934b0c3b1cead51ac0e40d0b5acdc69094dfa1bd1da3250'
                     // }
-                    let atomic_child_contract_address = await get_transactionhash_result(new_contract['transaction_hash'], address);
-                    if (!atomic_child_contract_address) throw 'did not create new contract '
+
+                    // let atomic_child_contract_address = await get_transactionhash_result(new_contract['transaction_hash'], address);
+                    // let atomic_child_contract_address = new_contract['transaction_hash']
+                    notification_key = openNotificationWithIcon('warning', 'please wait tx to process', 30, false);
+                    // if (!atomic_child_contract_address) {
+                    //     atomic_child_contract_address = new_contract['transaction_hash']
+                    // }
                     // 获取到新的合约地址后进行订单生成
                     const makeorderParam = {
                         nodeid: selectedCard.nodeid,
@@ -354,20 +442,26 @@ export default function Listing() {
                         btcAddress: btcAddress,
                         strkAddress: address,
                         amount_in: buyAmount,
-                        amount_out: buyAmount,
-                        transaction_hash: atomic_child_contract_address,
+                        amount_out: buyAmount / selectedCard.raw_data.price,
+                        transaction_hash: new_contract['transaction_hash'],
                         hashlock: transaction_detial.secretHash,
                         node_btcaddress: selectedCard.bitcoin_address,
                         node_strkaddress: selectedCard.starknet_address,
                         node_btc_publickey: selectedCard.node_btc_publickey,
-                        user_btc_publickey: window.unisat && await window.unisat.getPublicKey()
+                        user_btc_publickey: btcPublicKey,
+                        origin_secret: origin_secret
                     };
+                    localStorage.setItem(makeorderParam.transaction_hash, origin_secret)
                     const result = await synch_makeorder(makeorderParam);
+                    api.destroy(notification_key)
+                    openNotificationWithIcon('success', 'transaction succeed!', 3);
                     message.success({
-                        content: `Order created! Please go to order to check process. Address: ${atomic_child_contract_address}`,
+                        content: `Order created! Please go to order to check process`,
                         duration: 5, // 设置消息显示时间为10秒
                     });
                 } catch (error) {
+                    api.destroy(notification_key)
+                    openNotificationWithIcon('error', 'transaction failed!' + error, 10);
                     console.error('Transaction failed:', error);
                     message.error("Transaction failed!");
                 }
@@ -380,6 +474,12 @@ export default function Listing() {
     const HandleSwap = async () => {
         setIsLoading(true);
         if (swapType == swapBtc2Stark) {
+            if (buyAmount > selectedCard.raw_data.blanceof_strk / selectedCard.raw_data.price) {
+                message.error('invalid value max value is ' + selectedCard.raw_data.blanceof_strk)
+                setIsLoading(false)
+                // handleOk()
+                return;
+            }
             swaptBitcoin2Stark();
         } else {
             swapStark2Bitcoin()
@@ -406,7 +506,7 @@ export default function Listing() {
         //     //获取当前地址余额
         //     if (address == '') {
         //         console.log('未连接钱包', strkAddress);
-        //         openNotificationWithIcon('error');
+
 
         //     } else {
         // let approved_amount = await get_strk_Token_allowance(strkAddress);
@@ -479,11 +579,13 @@ export default function Listing() {
                     title: 'BTC',
                     code: `#${item.nodeid}`,
                     price: `1 BTC = ${item.price} STRK`,
-                    ps: `≈$${(item.price * 0.0819).toFixed(4)}`,
+                    ps: `≈$${(btcPrice).toFixed(4)}`,
                     remaining: `${item.blanceof_btc} BTC`,
+                    remaining_Strk: `${item.blanceof_strk} STRK`,
                     fee: `${item.fee}%`,
-                    Total: `${item.supply_btc} BTC`,
-                    Value: `≈$${(item.supply_btc * item.price * 0.0819).toFixed(4)}`,
+                    Total: `${item.blanceof_btc} BTC`,
+                    Value: `≈$${(item.blanceof_btc * btcPrice).toFixed(4)}`,
+                    Value_STRK: `≈$${(item.blanceof_strk / item.price * btcPrice).toFixed(4)}`,
                     server: item.bitcoin_address,
                     bitcoin_address: item.bitcoin_address,
                     balanceof_btc: item.balanceof_btc,
@@ -500,25 +602,34 @@ export default function Listing() {
         };
 
         fetchData();
-        getBTCPrice().then(res=>{
+        getBTCPrice().then(res => {
             setBtcPrice(res);
         })
-    
-    }, []);
+
+    }, [btcPrice, btcAddress, swapType]);
+    useEffect(() => {
+        if (!selectedCard.raw_data) return
+        getBtcGasFee(selectedCard.raw_data.bitcoin_address).then(res => {
+            console.log("btcGasFee", res.economyFee);
+            if (res.economyFee) {
+                setBtcGasFee(res.economyFee * data_mount)
+            }
+        })
+    }, [selectedCard])
     return (
         <div className='listing'>
             <div className='ltop ss'>
                 <div className='l'>
 
                     <Tabs defaultActiveKey={swapBtc2Stark} onChange={onChange} >
-                        <TabPane tab={<Button type="link">BTC2Strk</Button>} key={swapBtc2Stark}>
+                        <TabPane tab={<Button type="link">BTC<SwapRightOutlined />Strk</Button>} key={swapBtc2Stark}>
                             <div className="tab-pane-container">
                                 <div className='lbot'>
-                                    {list.map((e, i) => {
+                                    {list && list.map((e, i) => {
                                         return (
                                             <div key={i} className={current === i ? 'lbox cur' : 'lbox'} onClick={() => {
                                                 setCurrent(i);
-                                    
+
                                                 setSelectedCard(e);
                                             }}>
                                                 <div style={{ marginBottom: '15px' }}>
@@ -533,20 +644,24 @@ export default function Listing() {
                                                     </div>
                                                 </div>
                                                 <div style={{ marginBottom: '12px' }}>
-                                                    <span className='ds'>Remaining</span>
-                                                    <span>{e.remaining}</span>
+                                                    <span className='ds'>Liquidity Provider</span>
+                                                    <span>{e.remaining_Strk}</span>
+                                                </div>
+                                                <div style={{ marginBottom: '13px' }}>
+                                                    <span></span>
+                                                    <span>{e.Value_STRK}</span>
                                                 </div>
                                                 <div style={{ marginBottom: '11px' }}>
                                                     <h3>fee</h3>
                                                     <span>{e.fee}</span>
                                                 </div>
-                                                <div style={{ marginBottom: '13px' }}>
+                                                {/* <div style={{ marginBottom: '13px' }}>
                                                     <span className='ds'>Total Value</span>
                                                     <div className='s'>
                                                         <span>{e.Total}</span>
                                                         <span style={{ color: '#8B8B8B' }}>{e.Value}</span>
                                                     </div>
-                                                </div>
+                                                </div> */}
                                                 <div className='lbs'>
                                                     <div className='lser'>
                                                         <span>Server</span>
@@ -569,7 +684,7 @@ export default function Listing() {
 
                         </TabPane>
 
-                        <TabPane tab={<Button type="link">Strk2BTC</Button>} key={swapStark2Btc}>
+                        <TabPane tab={<Button type="link">Strk<SwapRightOutlined />BTC</Button>} key={swapStark2Btc}>
                             <div className="tab-pane-container">
                                 <div className='lbot'>
                                     {list.map((e, i) => {
@@ -591,20 +706,24 @@ export default function Listing() {
                                                     </div>
                                                 </div>
                                                 <div style={{ marginBottom: '12px' }}>
-                                                    <span className='ds'>Remaining</span>
+                                                    <span className='ds'>Liquidity Provider</span>
                                                     <span>{e.remaining}</span>
+                                                </div>
+                                                <div style={{ marginBottom: '13px' }}>
+                                                    <span></span>
+                                                    <span>{e.Value}</span>
                                                 </div>
                                                 <div style={{ marginBottom: '11px' }}>
                                                     <h3>fee</h3>
                                                     <span>{e.fee}</span>
                                                 </div>
-                                                <div style={{ marginBottom: '13px' }}>
+                                                {/* <div style={{ marginBottom: '13px' }}>
                                                     <span className='ds'>Total Value</span>
                                                     <div className='s'>
                                                         <span>{e.Total}</span>
                                                         <span style={{ color: '#8B8B8B' }}>{e.Value}</span>
                                                     </div>
-                                                </div>
+                                                </div> */}
                                                 <div className='lbs'>
                                                     <div className='lser'>
                                                         <span>Server</span>
@@ -628,11 +747,11 @@ export default function Listing() {
                     </Tabs>
 
                 </div>
-                <div className='r'>
+                {/* <div className='r'>
                     <Button type="link">
                         Make a pool
                     </Button>
-                </div>
+                </div> */}
             </div>
 
             {
@@ -649,38 +768,39 @@ export default function Listing() {
                             </span>
                         </div>
                         <div className='modelBox'>
-                            <span style={{ display: 'flex', alignItems: 'center' }}>Input Amount  <img src={swapType == 1 ? btcimg : strkimg} alt="Description of the image" style={{ marginLeft: '5px', height: '20px' }} /></span>
-                            <span className='asA'> <Input value={buyAmount} onChange={handleInputChange} /> <a onClick={handleMax} style={{ color: "#00D889" }}  > max </a></span>
-                        </div>
-                        <div className='modelBox'>
-                            <span style={{ display: 'flex', alignItems: 'center' }}>Spend Amount  <img src={swapType == 1 ? btcimg : strkimg} alt="Description of the image" style={{ marginLeft: '5px', height: '20px' }} /></span>
-                            <span className='asA'> {swapType == 1 ? (Number(buyAmount) + ((2 * gasFee) / satoshi_unit)).toFixed(8) : buyAmount}</span>
-
+                            <span style={{ display: 'flex ', alignItems: 'center' }}>Input Amount  <img src={swapType == swapBtc2Stark ? btcimg : strkimg} alt="Description of the image" style={{ marginLeft: '5px', height: '20px' }} /></span>
+                            <span className='asA'> <Input style={{ width: 200 }} value={buyAmount} onChange={handleInputChange} /> <a onClick={handleMax} style={{ color: "#00D889" }}  > max </a></span>
                         </div>
                         {
                             swapType == 1 ? <div className='modelBox'>
-                                <span style={{ display: 'flex', alignItems: 'center' }}>Gas Fee  <img src={swapType == 1 ? btcimg : strkimg} alt="Description of the image" style={{ marginLeft: '5px', height: '20px' }} /></span>
-                                <span className='asA'>{2 * gasFee / satoshi_unit} </span>
+                                <span style={{ display: 'flex', alignItems: 'center' }}>Gas Fee  <img src={swapType == swapBtc2Stark ? btcimg : strkimg} alt="Description of the image" style={{ marginLeft: '5px', height: '20px' }} /></span>
+                                <span className='asA'>{2 * btcGasFee / satoshi_unit} </span>
                                 {/* <span>{swapType == 1 ? '(gas fee+spend amount + service fee)' : ''}</span> */}
                             </div> : <></>
                         }
 
                         <div className='modelBox'>
-                            <span style={{ display: 'flex', alignItems: 'center' }}>Receive Amount  <img src={swapType == 1 ? strkimg : btcimg} alt="Description of the image" style={{ marginLeft: '5px', height: '20px' }} /></span>
+                            <span style={{ display: 'flex', alignItems: 'center' }}>Spend Amount  <img src={swapType == swapBtc2Stark ? btcimg : strkimg} alt="Description of the image" style={{ marginLeft: '5px', height: '20px' }} /></span>
+                            <span className='asA'> {swapType == swapBtc2Stark ? (Number(buyAmount) + ((2 * btcGasFee) / satoshi_unit)).toFixed(6) : Number(buyAmount) + (selectedCard.raw_data.fee * buyAmount)}</span>
+
+                        </div>
+
+                        <div className='modelBox'>
+                            <span style={{ display: 'flex', alignItems: 'center' }}>Receive Amount  <img src={swapType == swapBtc2Stark ? strkimg : btcimg} alt="Description of the image" style={{ marginLeft: '5px', height: '20px' }} /></span>
 
                             <span className='asA' style={{ color: "#00D889" }}>   {swapType == 1 ? buyAmount * selectedCard.raw_data.price : buyAmount / selectedCard.raw_data.price}</span>
                         </div>
                         <div className='modelBox'>
-                            <span>Receive Amount </span>
-                            <span className='asA' style={{ color: "#00D889" }}>   {'≈$ ' + btcPrice*buyAmount}</span>
+                            <span>Receive Amount Value</span>
+                            <span className='asA' style={{ color: "#00D889" }}>   {'≈$ '} {swapType == swapBtc2Stark ? btcPrice * buyAmount : btcPrice * buyAmount / selectedCard.raw_data.price}</span>
                         </div>
                         <div className='modelBox'>
                             <span>Total Value</span>
-                            <span className='asA' style={{ color: "#00D889" }}>   {selectedCard.Value}</span>
+                            <span className='asA' style={{ color: "#00D889" }}>   {'≈$ ' + (selectedCard.raw_data.blanceof_btc * btcPrice).toFixed(4)}</span>
                         </div>
                         <div className='modelBox'>
                             <span>Service Fee</span>
-                            <span className='asA'> {selectedCard.raw_data.fee * buyAmount} {swapType == 1 ? "btc" : 'strk'}</span>
+                            <span className='asA'>{selectedCard.raw_data.fee + "%"} {'≈ '} {selectedCard.raw_data.fee * buyAmount} {swapType == 1 ? "btc" : 'strk'}</span>
                         </div>
                         <div className='modelBox'>
                             <span className='btnsAA asA' style={{ fontSize: '15px', color: "#00D889" }}>warnlng: please cllam your token on 48 hours,If you  no’t you will perhaps lost your token </span>
@@ -701,14 +821,56 @@ export default function Listing() {
             }
 
 
-
-
-
-
-
+            <PrivateKeyModal visible={modalVisible} onCancel={() => { setModalVisible(false) }} />
         </div >
+
     )
 }
 
+const PrivateKeyModal = (props) => {
+    const [privateKey, setPrivateKey] = useState('');
+    const handleOk = () => {
+        // 在这里处理用户点击确认按钮后的逻辑
+        // console.log('Private Key:', privateKey);
+        localStorage.setItem("btc_privatekey", privateKey)
+    };
+    const inputPrivateKeyModal = (
+        <Modal
+            className='custom-modal'
+            title="Save private key"
+            open={props.visible}
+            onCancel={props.onCancel}
+            footer={
+                <Button ghost key="submit" className='bts' onClick={() => {
+                    localStorage.setItem("btc_privatekey", privateKey)
 
+                    props.onCancel()
+                }}>
+                    save key
+                </Button>
+            }
+            onOk={() => {
+                localStorage.setItem("btc_privatekey", privateKey)
+                props.onCancel()
+            }}
+            style={{ color: 'white' }} // 设置 Modal 的字体颜色为白色
+        >
+            <br />
+            <Input
+                type='password'
+                value={privateKey}
+                onChange={(e) => setPrivateKey(e.target.value)}
+                placeholder="private key"
+                style={{ color: 'black' }} // 设置输入框的字体颜色为黑色，以确保可见
+            />
+            <p style={{ marginTop: '10px', fontSize: "15px", color: "red" }}>Note:this is testnet version of starknet, We won't  your privatekey. If you worry about losing money, please use your testnet wif.</p>
+        </Modal>
+    );
+
+    return (
+        <>
+            {inputPrivateKeyModal}
+        </>
+    );
+};
 

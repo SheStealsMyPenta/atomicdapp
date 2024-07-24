@@ -6,13 +6,13 @@ window.Buffer = window.Buffer || require("buffer").Buffer;
 function App() {
   return (
     <div className="App">
-       <StarknetProvider>
-         <WalletProvider>
-        <Main />
+      <StarknetProvider>
+        <WalletProvider>
+          <Main />
         </WalletProvider>
-       </StarknetProvider>
-       
-   
+      </StarknetProvider>
+
+
     </div>
   );
 }
